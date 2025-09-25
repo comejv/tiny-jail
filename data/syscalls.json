@@ -1,0 +1,2512 @@
+[
+  {
+    "number": 0,
+    "abi": "common",
+    "name": "read",
+    "entry_point": "sys_read"
+  },
+  {
+    "number": 1,
+    "abi": "common",
+    "name": "write",
+    "entry_point": "sys_write"
+  },
+  {
+    "number": 2,
+    "abi": "common",
+    "name": "open",
+    "entry_point": "sys_open"
+  },
+  {
+    "number": 3,
+    "abi": "common",
+    "name": "close",
+    "entry_point": "sys_close"
+  },
+  {
+    "number": 4,
+    "abi": "common",
+    "name": "stat",
+    "entry_point": "sys_newstat"
+  },
+  {
+    "number": 5,
+    "abi": "common",
+    "name": "fstat",
+    "entry_point": "sys_newfstat"
+  },
+  {
+    "number": 6,
+    "abi": "common",
+    "name": "lstat",
+    "entry_point": "sys_newlstat"
+  },
+  {
+    "number": 7,
+    "abi": "common",
+    "name": "poll",
+    "entry_point": "sys_poll"
+  },
+  {
+    "number": 8,
+    "abi": "common",
+    "name": "lseek",
+    "entry_point": "sys_lseek"
+  },
+  {
+    "number": 9,
+    "abi": "common",
+    "name": "mmap",
+    "entry_point": "sys_mmap"
+  },
+  {
+    "number": 10,
+    "abi": "common",
+    "name": "mprotect",
+    "entry_point": "sys_mprotect"
+  },
+  {
+    "number": 11,
+    "abi": "common",
+    "name": "munmap",
+    "entry_point": "sys_munmap"
+  },
+  {
+    "number": 12,
+    "abi": "common",
+    "name": "brk",
+    "entry_point": "sys_brk"
+  },
+  {
+    "number": 13,
+    "abi": "64",
+    "name": "rt_sigaction",
+    "entry_point": "sys_rt_sigaction"
+  },
+  {
+    "number": 14,
+    "abi": "common",
+    "name": "rt_sigprocmask",
+    "entry_point": "sys_rt_sigprocmask"
+  },
+  {
+    "number": 15,
+    "abi": "64",
+    "name": "rt_sigreturn",
+    "entry_point": "sys_rt_sigreturn"
+  },
+  {
+    "number": 16,
+    "abi": "64",
+    "name": "ioctl",
+    "entry_point": "sys_ioctl"
+  },
+  {
+    "number": 17,
+    "abi": "common",
+    "name": "pread64",
+    "entry_point": "sys_pread64"
+  },
+  {
+    "number": 18,
+    "abi": "common",
+    "name": "pwrite64",
+    "entry_point": "sys_pwrite64"
+  },
+  {
+    "number": 19,
+    "abi": "64",
+    "name": "readv",
+    "entry_point": "sys_readv"
+  },
+  {
+    "number": 20,
+    "abi": "64",
+    "name": "writev",
+    "entry_point": "sys_writev"
+  },
+  {
+    "number": 21,
+    "abi": "common",
+    "name": "access",
+    "entry_point": "sys_access"
+  },
+  {
+    "number": 22,
+    "abi": "common",
+    "name": "pipe",
+    "entry_point": "sys_pipe"
+  },
+  {
+    "number": 23,
+    "abi": "common",
+    "name": "select",
+    "entry_point": "sys_select"
+  },
+  {
+    "number": 24,
+    "abi": "common",
+    "name": "sched_yield",
+    "entry_point": "sys_sched_yield"
+  },
+  {
+    "number": 25,
+    "abi": "common",
+    "name": "mremap",
+    "entry_point": "sys_mremap"
+  },
+  {
+    "number": 26,
+    "abi": "common",
+    "name": "msync",
+    "entry_point": "sys_msync"
+  },
+  {
+    "number": 27,
+    "abi": "common",
+    "name": "mincore",
+    "entry_point": "sys_mincore"
+  },
+  {
+    "number": 28,
+    "abi": "common",
+    "name": "madvise",
+    "entry_point": "sys_madvise"
+  },
+  {
+    "number": 29,
+    "abi": "common",
+    "name": "shmget",
+    "entry_point": "sys_shmget"
+  },
+  {
+    "number": 30,
+    "abi": "common",
+    "name": "shmat",
+    "entry_point": "sys_shmat"
+  },
+  {
+    "number": 31,
+    "abi": "common",
+    "name": "shmctl",
+    "entry_point": "sys_shmctl"
+  },
+  {
+    "number": 32,
+    "abi": "common",
+    "name": "dup",
+    "entry_point": "sys_dup"
+  },
+  {
+    "number": 33,
+    "abi": "common",
+    "name": "dup2",
+    "entry_point": "sys_dup2"
+  },
+  {
+    "number": 34,
+    "abi": "common",
+    "name": "pause",
+    "entry_point": "sys_pause"
+  },
+  {
+    "number": 35,
+    "abi": "common",
+    "name": "nanosleep",
+    "entry_point": "sys_nanosleep"
+  },
+  {
+    "number": 36,
+    "abi": "common",
+    "name": "getitimer",
+    "entry_point": "sys_getitimer"
+  },
+  {
+    "number": 37,
+    "abi": "common",
+    "name": "alarm",
+    "entry_point": "sys_alarm"
+  },
+  {
+    "number": 38,
+    "abi": "common",
+    "name": "setitimer",
+    "entry_point": "sys_setitimer"
+  },
+  {
+    "number": 39,
+    "abi": "common",
+    "name": "getpid",
+    "entry_point": "sys_getpid"
+  },
+  {
+    "number": 40,
+    "abi": "common",
+    "name": "sendfile",
+    "entry_point": "sys_sendfile64"
+  },
+  {
+    "number": 41,
+    "abi": "common",
+    "name": "socket",
+    "entry_point": "sys_socket"
+  },
+  {
+    "number": 42,
+    "abi": "common",
+    "name": "connect",
+    "entry_point": "sys_connect"
+  },
+  {
+    "number": 43,
+    "abi": "common",
+    "name": "accept",
+    "entry_point": "sys_accept"
+  },
+  {
+    "number": 44,
+    "abi": "common",
+    "name": "sendto",
+    "entry_point": "sys_sendto"
+  },
+  {
+    "number": 45,
+    "abi": "64",
+    "name": "recvfrom",
+    "entry_point": "sys_recvfrom"
+  },
+  {
+    "number": 46,
+    "abi": "64",
+    "name": "sendmsg",
+    "entry_point": "sys_sendmsg"
+  },
+  {
+    "number": 47,
+    "abi": "64",
+    "name": "recvmsg",
+    "entry_point": "sys_recvmsg"
+  },
+  {
+    "number": 48,
+    "abi": "common",
+    "name": "shutdown",
+    "entry_point": "sys_shutdown"
+  },
+  {
+    "number": 49,
+    "abi": "common",
+    "name": "bind",
+    "entry_point": "sys_bind"
+  },
+  {
+    "number": 50,
+    "abi": "common",
+    "name": "listen",
+    "entry_point": "sys_listen"
+  },
+  {
+    "number": 51,
+    "abi": "common",
+    "name": "getsockname",
+    "entry_point": "sys_getsockname"
+  },
+  {
+    "number": 52,
+    "abi": "common",
+    "name": "getpeername",
+    "entry_point": "sys_getpeername"
+  },
+  {
+    "number": 53,
+    "abi": "common",
+    "name": "socketpair",
+    "entry_point": "sys_socketpair"
+  },
+  {
+    "number": 54,
+    "abi": "64",
+    "name": "setsockopt",
+    "entry_point": "sys_setsockopt"
+  },
+  {
+    "number": 55,
+    "abi": "64",
+    "name": "getsockopt",
+    "entry_point": "sys_getsockopt"
+  },
+  {
+    "number": 56,
+    "abi": "common",
+    "name": "clone",
+    "entry_point": "sys_clone"
+  },
+  {
+    "number": 57,
+    "abi": "common",
+    "name": "fork",
+    "entry_point": "sys_fork"
+  },
+  {
+    "number": 58,
+    "abi": "common",
+    "name": "vfork",
+    "entry_point": "sys_vfork"
+  },
+  {
+    "number": 59,
+    "abi": "64",
+    "name": "execve",
+    "entry_point": "sys_execve"
+  },
+  {
+    "number": 60,
+    "abi": "common",
+    "name": "exit",
+    "entry_point": "sys_exit",
+    "compat_entry_point": "noreturn"
+  },
+  {
+    "number": 61,
+    "abi": "common",
+    "name": "wait4",
+    "entry_point": "sys_wait4"
+  },
+  {
+    "number": 62,
+    "abi": "common",
+    "name": "kill",
+    "entry_point": "sys_kill"
+  },
+  {
+    "number": 63,
+    "abi": "common",
+    "name": "uname",
+    "entry_point": "sys_newuname"
+  },
+  {
+    "number": 64,
+    "abi": "common",
+    "name": "semget",
+    "entry_point": "sys_semget"
+  },
+  {
+    "number": 65,
+    "abi": "common",
+    "name": "semop",
+    "entry_point": "sys_semop"
+  },
+  {
+    "number": 66,
+    "abi": "common",
+    "name": "semctl",
+    "entry_point": "sys_semctl"
+  },
+  {
+    "number": 67,
+    "abi": "common",
+    "name": "shmdt",
+    "entry_point": "sys_shmdt"
+  },
+  {
+    "number": 68,
+    "abi": "common",
+    "name": "msgget",
+    "entry_point": "sys_msgget"
+  },
+  {
+    "number": 69,
+    "abi": "common",
+    "name": "msgsnd",
+    "entry_point": "sys_msgsnd"
+  },
+  {
+    "number": 70,
+    "abi": "common",
+    "name": "msgrcv",
+    "entry_point": "sys_msgrcv"
+  },
+  {
+    "number": 71,
+    "abi": "common",
+    "name": "msgctl",
+    "entry_point": "sys_msgctl"
+  },
+  {
+    "number": 72,
+    "abi": "common",
+    "name": "fcntl",
+    "entry_point": "sys_fcntl"
+  },
+  {
+    "number": 73,
+    "abi": "common",
+    "name": "flock",
+    "entry_point": "sys_flock"
+  },
+  {
+    "number": 74,
+    "abi": "common",
+    "name": "fsync",
+    "entry_point": "sys_fsync"
+  },
+  {
+    "number": 75,
+    "abi": "common",
+    "name": "fdatasync",
+    "entry_point": "sys_fdatasync"
+  },
+  {
+    "number": 76,
+    "abi": "common",
+    "name": "truncate",
+    "entry_point": "sys_truncate"
+  },
+  {
+    "number": 77,
+    "abi": "common",
+    "name": "ftruncate",
+    "entry_point": "sys_ftruncate"
+  },
+  {
+    "number": 78,
+    "abi": "common",
+    "name": "getdents",
+    "entry_point": "sys_getdents"
+  },
+  {
+    "number": 79,
+    "abi": "common",
+    "name": "getcwd",
+    "entry_point": "sys_getcwd"
+  },
+  {
+    "number": 80,
+    "abi": "common",
+    "name": "chdir",
+    "entry_point": "sys_chdir"
+  },
+  {
+    "number": 81,
+    "abi": "common",
+    "name": "fchdir",
+    "entry_point": "sys_fchdir"
+  },
+  {
+    "number": 82,
+    "abi": "common",
+    "name": "rename",
+    "entry_point": "sys_rename"
+  },
+  {
+    "number": 83,
+    "abi": "common",
+    "name": "mkdir",
+    "entry_point": "sys_mkdir"
+  },
+  {
+    "number": 84,
+    "abi": "common",
+    "name": "rmdir",
+    "entry_point": "sys_rmdir"
+  },
+  {
+    "number": 85,
+    "abi": "common",
+    "name": "creat",
+    "entry_point": "sys_creat"
+  },
+  {
+    "number": 86,
+    "abi": "common",
+    "name": "link",
+    "entry_point": "sys_link"
+  },
+  {
+    "number": 87,
+    "abi": "common",
+    "name": "unlink",
+    "entry_point": "sys_unlink"
+  },
+  {
+    "number": 88,
+    "abi": "common",
+    "name": "symlink",
+    "entry_point": "sys_symlink"
+  },
+  {
+    "number": 89,
+    "abi": "common",
+    "name": "readlink",
+    "entry_point": "sys_readlink"
+  },
+  {
+    "number": 90,
+    "abi": "common",
+    "name": "chmod",
+    "entry_point": "sys_chmod"
+  },
+  {
+    "number": 91,
+    "abi": "common",
+    "name": "fchmod",
+    "entry_point": "sys_fchmod"
+  },
+  {
+    "number": 92,
+    "abi": "common",
+    "name": "chown",
+    "entry_point": "sys_chown"
+  },
+  {
+    "number": 93,
+    "abi": "common",
+    "name": "fchown",
+    "entry_point": "sys_fchown"
+  },
+  {
+    "number": 94,
+    "abi": "common",
+    "name": "lchown",
+    "entry_point": "sys_lchown"
+  },
+  {
+    "number": 95,
+    "abi": "common",
+    "name": "umask",
+    "entry_point": "sys_umask"
+  },
+  {
+    "number": 96,
+    "abi": "common",
+    "name": "gettimeofday",
+    "entry_point": "sys_gettimeofday"
+  },
+  {
+    "number": 97,
+    "abi": "common",
+    "name": "getrlimit",
+    "entry_point": "sys_getrlimit"
+  },
+  {
+    "number": 98,
+    "abi": "common",
+    "name": "getrusage",
+    "entry_point": "sys_getrusage"
+  },
+  {
+    "number": 99,
+    "abi": "common",
+    "name": "sysinfo",
+    "entry_point": "sys_sysinfo"
+  },
+  {
+    "number": 100,
+    "abi": "common",
+    "name": "times",
+    "entry_point": "sys_times"
+  },
+  {
+    "number": 101,
+    "abi": "64",
+    "name": "ptrace",
+    "entry_point": "sys_ptrace"
+  },
+  {
+    "number": 102,
+    "abi": "common",
+    "name": "getuid",
+    "entry_point": "sys_getuid"
+  },
+  {
+    "number": 103,
+    "abi": "common",
+    "name": "syslog",
+    "entry_point": "sys_syslog"
+  },
+  {
+    "number": 104,
+    "abi": "common",
+    "name": "getgid",
+    "entry_point": "sys_getgid"
+  },
+  {
+    "number": 105,
+    "abi": "common",
+    "name": "setuid",
+    "entry_point": "sys_setuid"
+  },
+  {
+    "number": 106,
+    "abi": "common",
+    "name": "setgid",
+    "entry_point": "sys_setgid"
+  },
+  {
+    "number": 107,
+    "abi": "common",
+    "name": "geteuid",
+    "entry_point": "sys_geteuid"
+  },
+  {
+    "number": 108,
+    "abi": "common",
+    "name": "getegid",
+    "entry_point": "sys_getegid"
+  },
+  {
+    "number": 109,
+    "abi": "common",
+    "name": "setpgid",
+    "entry_point": "sys_setpgid"
+  },
+  {
+    "number": 110,
+    "abi": "common",
+    "name": "getppid",
+    "entry_point": "sys_getppid"
+  },
+  {
+    "number": 111,
+    "abi": "common",
+    "name": "getpgrp",
+    "entry_point": "sys_getpgrp"
+  },
+  {
+    "number": 112,
+    "abi": "common",
+    "name": "setsid",
+    "entry_point": "sys_setsid"
+  },
+  {
+    "number": 113,
+    "abi": "common",
+    "name": "setreuid",
+    "entry_point": "sys_setreuid"
+  },
+  {
+    "number": 114,
+    "abi": "common",
+    "name": "setregid",
+    "entry_point": "sys_setregid"
+  },
+  {
+    "number": 115,
+    "abi": "common",
+    "name": "getgroups",
+    "entry_point": "sys_getgroups"
+  },
+  {
+    "number": 116,
+    "abi": "common",
+    "name": "setgroups",
+    "entry_point": "sys_setgroups"
+  },
+  {
+    "number": 117,
+    "abi": "common",
+    "name": "setresuid",
+    "entry_point": "sys_setresuid"
+  },
+  {
+    "number": 118,
+    "abi": "common",
+    "name": "getresuid",
+    "entry_point": "sys_getresuid"
+  },
+  {
+    "number": 119,
+    "abi": "common",
+    "name": "setresgid",
+    "entry_point": "sys_setresgid"
+  },
+  {
+    "number": 120,
+    "abi": "common",
+    "name": "getresgid",
+    "entry_point": "sys_getresgid"
+  },
+  {
+    "number": 121,
+    "abi": "common",
+    "name": "getpgid",
+    "entry_point": "sys_getpgid"
+  },
+  {
+    "number": 122,
+    "abi": "common",
+    "name": "setfsuid",
+    "entry_point": "sys_setfsuid"
+  },
+  {
+    "number": 123,
+    "abi": "common",
+    "name": "setfsgid",
+    "entry_point": "sys_setfsgid"
+  },
+  {
+    "number": 124,
+    "abi": "common",
+    "name": "getsid",
+    "entry_point": "sys_getsid"
+  },
+  {
+    "number": 125,
+    "abi": "common",
+    "name": "capget",
+    "entry_point": "sys_capget"
+  },
+  {
+    "number": 126,
+    "abi": "common",
+    "name": "capset",
+    "entry_point": "sys_capset"
+  },
+  {
+    "number": 127,
+    "abi": "64",
+    "name": "rt_sigpending",
+    "entry_point": "sys_rt_sigpending"
+  },
+  {
+    "number": 128,
+    "abi": "64",
+    "name": "rt_sigtimedwait",
+    "entry_point": "sys_rt_sigtimedwait"
+  },
+  {
+    "number": 129,
+    "abi": "64",
+    "name": "rt_sigqueueinfo",
+    "entry_point": "sys_rt_sigqueueinfo"
+  },
+  {
+    "number": 130,
+    "abi": "common",
+    "name": "rt_sigsuspend",
+    "entry_point": "sys_rt_sigsuspend"
+  },
+  {
+    "number": 131,
+    "abi": "64",
+    "name": "sigaltstack",
+    "entry_point": "sys_sigaltstack"
+  },
+  {
+    "number": 132,
+    "abi": "common",
+    "name": "utime",
+    "entry_point": "sys_utime"
+  },
+  {
+    "number": 133,
+    "abi": "common",
+    "name": "mknod",
+    "entry_point": "sys_mknod"
+  },
+  {
+    "number": 134,
+    "abi": "64",
+    "name": "uselib",
+    "entry_point": "-"
+  },
+  {
+    "number": 135,
+    "abi": "common",
+    "name": "personality",
+    "entry_point": "sys_personality"
+  },
+  {
+    "number": 136,
+    "abi": "common",
+    "name": "ustat",
+    "entry_point": "sys_ustat"
+  },
+  {
+    "number": 137,
+    "abi": "common",
+    "name": "statfs",
+    "entry_point": "sys_statfs"
+  },
+  {
+    "number": 138,
+    "abi": "common",
+    "name": "fstatfs",
+    "entry_point": "sys_fstatfs"
+  },
+  {
+    "number": 139,
+    "abi": "common",
+    "name": "sysfs",
+    "entry_point": "sys_sysfs"
+  },
+  {
+    "number": 140,
+    "abi": "common",
+    "name": "getpriority",
+    "entry_point": "sys_getpriority"
+  },
+  {
+    "number": 141,
+    "abi": "common",
+    "name": "setpriority",
+    "entry_point": "sys_setpriority"
+  },
+  {
+    "number": 142,
+    "abi": "common",
+    "name": "sched_setparam",
+    "entry_point": "sys_sched_setparam"
+  },
+  {
+    "number": 143,
+    "abi": "common",
+    "name": "sched_getparam",
+    "entry_point": "sys_sched_getparam"
+  },
+  {
+    "number": 144,
+    "abi": "common",
+    "name": "sched_setscheduler",
+    "entry_point": "sys_sched_setscheduler"
+  },
+  {
+    "number": 145,
+    "abi": "common",
+    "name": "sched_getscheduler",
+    "entry_point": "sys_sched_getscheduler"
+  },
+  {
+    "number": 146,
+    "abi": "common",
+    "name": "sched_get_priority_max",
+    "entry_point": "sys_sched_get_priority_max"
+  },
+  {
+    "number": 147,
+    "abi": "common",
+    "name": "sched_get_priority_min",
+    "entry_point": "sys_sched_get_priority_min"
+  },
+  {
+    "number": 148,
+    "abi": "common",
+    "name": "sched_rr_get_interval",
+    "entry_point": "sys_sched_rr_get_interval"
+  },
+  {
+    "number": 149,
+    "abi": "common",
+    "name": "mlock",
+    "entry_point": "sys_mlock"
+  },
+  {
+    "number": 150,
+    "abi": "common",
+    "name": "munlock",
+    "entry_point": "sys_munlock"
+  },
+  {
+    "number": 151,
+    "abi": "common",
+    "name": "mlockall",
+    "entry_point": "sys_mlockall"
+  },
+  {
+    "number": 152,
+    "abi": "common",
+    "name": "munlockall",
+    "entry_point": "sys_munlockall"
+  },
+  {
+    "number": 153,
+    "abi": "common",
+    "name": "vhangup",
+    "entry_point": "sys_vhangup"
+  },
+  {
+    "number": 154,
+    "abi": "common",
+    "name": "modify_ldt",
+    "entry_point": "sys_modify_ldt"
+  },
+  {
+    "number": 155,
+    "abi": "common",
+    "name": "pivot_root",
+    "entry_point": "sys_pivot_root"
+  },
+  {
+    "number": 156,
+    "abi": "64",
+    "name": "_sysctl",
+    "entry_point": "sys_ni_syscall"
+  },
+  {
+    "number": 157,
+    "abi": "common",
+    "name": "prctl",
+    "entry_point": "sys_prctl"
+  },
+  {
+    "number": 158,
+    "abi": "common",
+    "name": "arch_prctl",
+    "entry_point": "sys_arch_prctl"
+  },
+  {
+    "number": 159,
+    "abi": "common",
+    "name": "adjtimex",
+    "entry_point": "sys_adjtimex"
+  },
+  {
+    "number": 160,
+    "abi": "common",
+    "name": "setrlimit",
+    "entry_point": "sys_setrlimit"
+  },
+  {
+    "number": 161,
+    "abi": "common",
+    "name": "chroot",
+    "entry_point": "sys_chroot"
+  },
+  {
+    "number": 162,
+    "abi": "common",
+    "name": "sync",
+    "entry_point": "sys_sync"
+  },
+  {
+    "number": 163,
+    "abi": "common",
+    "name": "acct",
+    "entry_point": "sys_acct"
+  },
+  {
+    "number": 164,
+    "abi": "common",
+    "name": "settimeofday",
+    "entry_point": "sys_settimeofday"
+  },
+  {
+    "number": 165,
+    "abi": "common",
+    "name": "mount",
+    "entry_point": "sys_mount"
+  },
+  {
+    "number": 166,
+    "abi": "common",
+    "name": "umount2",
+    "entry_point": "sys_umount"
+  },
+  {
+    "number": 167,
+    "abi": "common",
+    "name": "swapon",
+    "entry_point": "sys_swapon"
+  },
+  {
+    "number": 168,
+    "abi": "common",
+    "name": "swapoff",
+    "entry_point": "sys_swapoff"
+  },
+  {
+    "number": 169,
+    "abi": "common",
+    "name": "reboot",
+    "entry_point": "sys_reboot"
+  },
+  {
+    "number": 170,
+    "abi": "common",
+    "name": "sethostname",
+    "entry_point": "sys_sethostname"
+  },
+  {
+    "number": 171,
+    "abi": "common",
+    "name": "setdomainname",
+    "entry_point": "sys_setdomainname"
+  },
+  {
+    "number": 172,
+    "abi": "common",
+    "name": "iopl",
+    "entry_point": "sys_iopl"
+  },
+  {
+    "number": 173,
+    "abi": "common",
+    "name": "ioperm",
+    "entry_point": "sys_ioperm"
+  },
+  {
+    "number": 174,
+    "abi": "64",
+    "name": "create_module",
+    "entry_point": "-"
+  },
+  {
+    "number": 175,
+    "abi": "common",
+    "name": "init_module",
+    "entry_point": "sys_init_module"
+  },
+  {
+    "number": 176,
+    "abi": "common",
+    "name": "delete_module",
+    "entry_point": "sys_delete_module"
+  },
+  {
+    "number": 177,
+    "abi": "64",
+    "name": "get_kernel_syms",
+    "entry_point": "-"
+  },
+  {
+    "number": 178,
+    "abi": "64",
+    "name": "query_module",
+    "entry_point": "-"
+  },
+  {
+    "number": 179,
+    "abi": "common",
+    "name": "quotactl",
+    "entry_point": "sys_quotactl"
+  },
+  {
+    "number": 180,
+    "abi": "64",
+    "name": "nfsservctl",
+    "entry_point": "-"
+  },
+  {
+    "number": 181,
+    "abi": "common",
+    "name": "getpmsg",
+    "entry_point": "-"
+  },
+  {
+    "number": 182,
+    "abi": "common",
+    "name": "putpmsg",
+    "entry_point": "-"
+  },
+  {
+    "number": 183,
+    "abi": "common",
+    "name": "afs_syscall",
+    "entry_point": "-"
+  },
+  {
+    "number": 184,
+    "abi": "common",
+    "name": "tuxcall",
+    "entry_point": "-"
+  },
+  {
+    "number": 185,
+    "abi": "common",
+    "name": "security",
+    "entry_point": "-"
+  },
+  {
+    "number": 186,
+    "abi": "common",
+    "name": "gettid",
+    "entry_point": "sys_gettid"
+  },
+  {
+    "number": 187,
+    "abi": "common",
+    "name": "readahead",
+    "entry_point": "sys_readahead"
+  },
+  {
+    "number": 188,
+    "abi": "common",
+    "name": "setxattr",
+    "entry_point": "sys_setxattr"
+  },
+  {
+    "number": 189,
+    "abi": "common",
+    "name": "lsetxattr",
+    "entry_point": "sys_lsetxattr"
+  },
+  {
+    "number": 190,
+    "abi": "common",
+    "name": "fsetxattr",
+    "entry_point": "sys_fsetxattr"
+  },
+  {
+    "number": 191,
+    "abi": "common",
+    "name": "getxattr",
+    "entry_point": "sys_getxattr"
+  },
+  {
+    "number": 192,
+    "abi": "common",
+    "name": "lgetxattr",
+    "entry_point": "sys_lgetxattr"
+  },
+  {
+    "number": 193,
+    "abi": "common",
+    "name": "fgetxattr",
+    "entry_point": "sys_fgetxattr"
+  },
+  {
+    "number": 194,
+    "abi": "common",
+    "name": "listxattr",
+    "entry_point": "sys_listxattr"
+  },
+  {
+    "number": 195,
+    "abi": "common",
+    "name": "llistxattr",
+    "entry_point": "sys_llistxattr"
+  },
+  {
+    "number": 196,
+    "abi": "common",
+    "name": "flistxattr",
+    "entry_point": "sys_flistxattr"
+  },
+  {
+    "number": 197,
+    "abi": "common",
+    "name": "removexattr",
+    "entry_point": "sys_removexattr"
+  },
+  {
+    "number": 198,
+    "abi": "common",
+    "name": "lremovexattr",
+    "entry_point": "sys_lremovexattr"
+  },
+  {
+    "number": 199,
+    "abi": "common",
+    "name": "fremovexattr",
+    "entry_point": "sys_fremovexattr"
+  },
+  {
+    "number": 200,
+    "abi": "common",
+    "name": "tkill",
+    "entry_point": "sys_tkill"
+  },
+  {
+    "number": 201,
+    "abi": "common",
+    "name": "time",
+    "entry_point": "sys_time"
+  },
+  {
+    "number": 202,
+    "abi": "common",
+    "name": "futex",
+    "entry_point": "sys_futex"
+  },
+  {
+    "number": 203,
+    "abi": "common",
+    "name": "sched_setaffinity",
+    "entry_point": "sys_sched_setaffinity"
+  },
+  {
+    "number": 204,
+    "abi": "common",
+    "name": "sched_getaffinity",
+    "entry_point": "sys_sched_getaffinity"
+  },
+  {
+    "number": 205,
+    "abi": "64",
+    "name": "set_thread_area",
+    "entry_point": "-"
+  },
+  {
+    "number": 206,
+    "abi": "64",
+    "name": "io_setup",
+    "entry_point": "sys_io_setup"
+  },
+  {
+    "number": 207,
+    "abi": "common",
+    "name": "io_destroy",
+    "entry_point": "sys_io_destroy"
+  },
+  {
+    "number": 208,
+    "abi": "common",
+    "name": "io_getevents",
+    "entry_point": "sys_io_getevents"
+  },
+  {
+    "number": 209,
+    "abi": "64",
+    "name": "io_submit",
+    "entry_point": "sys_io_submit"
+  },
+  {
+    "number": 210,
+    "abi": "common",
+    "name": "io_cancel",
+    "entry_point": "sys_io_cancel"
+  },
+  {
+    "number": 211,
+    "abi": "64",
+    "name": "get_thread_area",
+    "entry_point": "-"
+  },
+  {
+    "number": 212,
+    "abi": "common",
+    "name": "lookup_dcookie",
+    "entry_point": "-"
+  },
+  {
+    "number": 213,
+    "abi": "common",
+    "name": "epoll_create",
+    "entry_point": "sys_epoll_create"
+  },
+  {
+    "number": 214,
+    "abi": "64",
+    "name": "epoll_ctl_old",
+    "entry_point": "-"
+  },
+  {
+    "number": 215,
+    "abi": "64",
+    "name": "epoll_wait_old",
+    "entry_point": "-"
+  },
+  {
+    "number": 216,
+    "abi": "common",
+    "name": "remap_file_pages",
+    "entry_point": "sys_remap_file_pages"
+  },
+  {
+    "number": 217,
+    "abi": "common",
+    "name": "getdents64",
+    "entry_point": "sys_getdents64"
+  },
+  {
+    "number": 218,
+    "abi": "common",
+    "name": "set_tid_address",
+    "entry_point": "sys_set_tid_address"
+  },
+  {
+    "number": 219,
+    "abi": "common",
+    "name": "restart_syscall",
+    "entry_point": "sys_restart_syscall"
+  },
+  {
+    "number": 220,
+    "abi": "common",
+    "name": "semtimedop",
+    "entry_point": "sys_semtimedop"
+  },
+  {
+    "number": 221,
+    "abi": "common",
+    "name": "fadvise64",
+    "entry_point": "sys_fadvise64"
+  },
+  {
+    "number": 222,
+    "abi": "64",
+    "name": "timer_create",
+    "entry_point": "sys_timer_create"
+  },
+  {
+    "number": 223,
+    "abi": "common",
+    "name": "timer_settime",
+    "entry_point": "sys_timer_settime"
+  },
+  {
+    "number": 224,
+    "abi": "common",
+    "name": "timer_gettime",
+    "entry_point": "sys_timer_gettime"
+  },
+  {
+    "number": 225,
+    "abi": "common",
+    "name": "timer_getoverrun",
+    "entry_point": "sys_timer_getoverrun"
+  },
+  {
+    "number": 226,
+    "abi": "common",
+    "name": "timer_delete",
+    "entry_point": "sys_timer_delete"
+  },
+  {
+    "number": 227,
+    "abi": "common",
+    "name": "clock_settime",
+    "entry_point": "sys_clock_settime"
+  },
+  {
+    "number": 228,
+    "abi": "common",
+    "name": "clock_gettime",
+    "entry_point": "sys_clock_gettime"
+  },
+  {
+    "number": 229,
+    "abi": "common",
+    "name": "clock_getres",
+    "entry_point": "sys_clock_getres"
+  },
+  {
+    "number": 230,
+    "abi": "common",
+    "name": "clock_nanosleep",
+    "entry_point": "sys_clock_nanosleep"
+  },
+  {
+    "number": 231,
+    "abi": "common",
+    "name": "exit_group",
+    "entry_point": "sys_exit_group",
+    "compat_entry_point": "noreturn"
+  },
+  {
+    "number": 232,
+    "abi": "common",
+    "name": "epoll_wait",
+    "entry_point": "sys_epoll_wait"
+  },
+  {
+    "number": 233,
+    "abi": "common",
+    "name": "epoll_ctl",
+    "entry_point": "sys_epoll_ctl"
+  },
+  {
+    "number": 234,
+    "abi": "common",
+    "name": "tgkill",
+    "entry_point": "sys_tgkill"
+  },
+  {
+    "number": 235,
+    "abi": "common",
+    "name": "utimes",
+    "entry_point": "sys_utimes"
+  },
+  {
+    "number": 236,
+    "abi": "64",
+    "name": "vserver",
+    "entry_point": "-"
+  },
+  {
+    "number": 237,
+    "abi": "common",
+    "name": "mbind",
+    "entry_point": "sys_mbind"
+  },
+  {
+    "number": 238,
+    "abi": "common",
+    "name": "set_mempolicy",
+    "entry_point": "sys_set_mempolicy"
+  },
+  {
+    "number": 239,
+    "abi": "common",
+    "name": "get_mempolicy",
+    "entry_point": "sys_get_mempolicy"
+  },
+  {
+    "number": 240,
+    "abi": "common",
+    "name": "mq_open",
+    "entry_point": "sys_mq_open"
+  },
+  {
+    "number": 241,
+    "abi": "common",
+    "name": "mq_unlink",
+    "entry_point": "sys_mq_unlink"
+  },
+  {
+    "number": 242,
+    "abi": "common",
+    "name": "mq_timedsend",
+    "entry_point": "sys_mq_timedsend"
+  },
+  {
+    "number": 243,
+    "abi": "common",
+    "name": "mq_timedreceive",
+    "entry_point": "sys_mq_timedreceive"
+  },
+  {
+    "number": 244,
+    "abi": "64",
+    "name": "mq_notify",
+    "entry_point": "sys_mq_notify"
+  },
+  {
+    "number": 245,
+    "abi": "common",
+    "name": "mq_getsetattr",
+    "entry_point": "sys_mq_getsetattr"
+  },
+  {
+    "number": 246,
+    "abi": "64",
+    "name": "kexec_load",
+    "entry_point": "sys_kexec_load"
+  },
+  {
+    "number": 247,
+    "abi": "64",
+    "name": "waitid",
+    "entry_point": "sys_waitid"
+  },
+  {
+    "number": 248,
+    "abi": "common",
+    "name": "add_key",
+    "entry_point": "sys_add_key"
+  },
+  {
+    "number": 249,
+    "abi": "common",
+    "name": "request_key",
+    "entry_point": "sys_request_key"
+  },
+  {
+    "number": 250,
+    "abi": "common",
+    "name": "keyctl",
+    "entry_point": "sys_keyctl"
+  },
+  {
+    "number": 251,
+    "abi": "common",
+    "name": "ioprio_set",
+    "entry_point": "sys_ioprio_set"
+  },
+  {
+    "number": 252,
+    "abi": "common",
+    "name": "ioprio_get",
+    "entry_point": "sys_ioprio_get"
+  },
+  {
+    "number": 253,
+    "abi": "common",
+    "name": "inotify_init",
+    "entry_point": "sys_inotify_init"
+  },
+  {
+    "number": 254,
+    "abi": "common",
+    "name": "inotify_add_watch",
+    "entry_point": "sys_inotify_add_watch"
+  },
+  {
+    "number": 255,
+    "abi": "common",
+    "name": "inotify_rm_watch",
+    "entry_point": "sys_inotify_rm_watch"
+  },
+  {
+    "number": 256,
+    "abi": "common",
+    "name": "migrate_pages",
+    "entry_point": "sys_migrate_pages"
+  },
+  {
+    "number": 257,
+    "abi": "common",
+    "name": "openat",
+    "entry_point": "sys_openat"
+  },
+  {
+    "number": 258,
+    "abi": "common",
+    "name": "mkdirat",
+    "entry_point": "sys_mkdirat"
+  },
+  {
+    "number": 259,
+    "abi": "common",
+    "name": "mknodat",
+    "entry_point": "sys_mknodat"
+  },
+  {
+    "number": 260,
+    "abi": "common",
+    "name": "fchownat",
+    "entry_point": "sys_fchownat"
+  },
+  {
+    "number": 261,
+    "abi": "common",
+    "name": "futimesat",
+    "entry_point": "sys_futimesat"
+  },
+  {
+    "number": 262,
+    "abi": "common",
+    "name": "newfstatat",
+    "entry_point": "sys_newfstatat"
+  },
+  {
+    "number": 263,
+    "abi": "common",
+    "name": "unlinkat",
+    "entry_point": "sys_unlinkat"
+  },
+  {
+    "number": 264,
+    "abi": "common",
+    "name": "renameat",
+    "entry_point": "sys_renameat"
+  },
+  {
+    "number": 265,
+    "abi": "common",
+    "name": "linkat",
+    "entry_point": "sys_linkat"
+  },
+  {
+    "number": 266,
+    "abi": "common",
+    "name": "symlinkat",
+    "entry_point": "sys_symlinkat"
+  },
+  {
+    "number": 267,
+    "abi": "common",
+    "name": "readlinkat",
+    "entry_point": "sys_readlinkat"
+  },
+  {
+    "number": 268,
+    "abi": "common",
+    "name": "fchmodat",
+    "entry_point": "sys_fchmodat"
+  },
+  {
+    "number": 269,
+    "abi": "common",
+    "name": "faccessat",
+    "entry_point": "sys_faccessat"
+  },
+  {
+    "number": 270,
+    "abi": "common",
+    "name": "pselect6",
+    "entry_point": "sys_pselect6"
+  },
+  {
+    "number": 271,
+    "abi": "common",
+    "name": "ppoll",
+    "entry_point": "sys_ppoll"
+  },
+  {
+    "number": 272,
+    "abi": "common",
+    "name": "unshare",
+    "entry_point": "sys_unshare"
+  },
+  {
+    "number": 273,
+    "abi": "64",
+    "name": "set_robust_list",
+    "entry_point": "sys_set_robust_list"
+  },
+  {
+    "number": 274,
+    "abi": "64",
+    "name": "get_robust_list",
+    "entry_point": "sys_get_robust_list"
+  },
+  {
+    "number": 275,
+    "abi": "common",
+    "name": "splice",
+    "entry_point": "sys_splice"
+  },
+  {
+    "number": 276,
+    "abi": "common",
+    "name": "tee",
+    "entry_point": "sys_tee"
+  },
+  {
+    "number": 277,
+    "abi": "common",
+    "name": "sync_file_range",
+    "entry_point": "sys_sync_file_range"
+  },
+  {
+    "number": 278,
+    "abi": "64",
+    "name": "vmsplice",
+    "entry_point": "sys_vmsplice"
+  },
+  {
+    "number": 279,
+    "abi": "64",
+    "name": "move_pages",
+    "entry_point": "sys_move_pages"
+  },
+  {
+    "number": 280,
+    "abi": "common",
+    "name": "utimensat",
+    "entry_point": "sys_utimensat"
+  },
+  {
+    "number": 281,
+    "abi": "common",
+    "name": "epoll_pwait",
+    "entry_point": "sys_epoll_pwait"
+  },
+  {
+    "number": 282,
+    "abi": "common",
+    "name": "signalfd",
+    "entry_point": "sys_signalfd"
+  },
+  {
+    "number": 283,
+    "abi": "common",
+    "name": "timerfd_create",
+    "entry_point": "sys_timerfd_create"
+  },
+  {
+    "number": 284,
+    "abi": "common",
+    "name": "eventfd",
+    "entry_point": "sys_eventfd"
+  },
+  {
+    "number": 285,
+    "abi": "common",
+    "name": "fallocate",
+    "entry_point": "sys_fallocate"
+  },
+  {
+    "number": 286,
+    "abi": "common",
+    "name": "timerfd_settime",
+    "entry_point": "sys_timerfd_settime"
+  },
+  {
+    "number": 287,
+    "abi": "common",
+    "name": "timerfd_gettime",
+    "entry_point": "sys_timerfd_gettime"
+  },
+  {
+    "number": 288,
+    "abi": "common",
+    "name": "accept4",
+    "entry_point": "sys_accept4"
+  },
+  {
+    "number": 289,
+    "abi": "common",
+    "name": "signalfd4",
+    "entry_point": "sys_signalfd4"
+  },
+  {
+    "number": 290,
+    "abi": "common",
+    "name": "eventfd2",
+    "entry_point": "sys_eventfd2"
+  },
+  {
+    "number": 291,
+    "abi": "common",
+    "name": "epoll_create1",
+    "entry_point": "sys_epoll_create1"
+  },
+  {
+    "number": 292,
+    "abi": "common",
+    "name": "dup3",
+    "entry_point": "sys_dup3"
+  },
+  {
+    "number": 293,
+    "abi": "common",
+    "name": "pipe2",
+    "entry_point": "sys_pipe2"
+  },
+  {
+    "number": 294,
+    "abi": "common",
+    "name": "inotify_init1",
+    "entry_point": "sys_inotify_init1"
+  },
+  {
+    "number": 295,
+    "abi": "64",
+    "name": "preadv",
+    "entry_point": "sys_preadv"
+  },
+  {
+    "number": 296,
+    "abi": "64",
+    "name": "pwritev",
+    "entry_point": "sys_pwritev"
+  },
+  {
+    "number": 297,
+    "abi": "64",
+    "name": "rt_tgsigqueueinfo",
+    "entry_point": "sys_rt_tgsigqueueinfo"
+  },
+  {
+    "number": 298,
+    "abi": "common",
+    "name": "perf_event_open",
+    "entry_point": "sys_perf_event_open"
+  },
+  {
+    "number": 299,
+    "abi": "64",
+    "name": "recvmmsg",
+    "entry_point": "sys_recvmmsg"
+  },
+  {
+    "number": 300,
+    "abi": "common",
+    "name": "fanotify_init",
+    "entry_point": "sys_fanotify_init"
+  },
+  {
+    "number": 301,
+    "abi": "common",
+    "name": "fanotify_mark",
+    "entry_point": "sys_fanotify_mark"
+  },
+  {
+    "number": 302,
+    "abi": "common",
+    "name": "prlimit64",
+    "entry_point": "sys_prlimit64"
+  },
+  {
+    "number": 303,
+    "abi": "common",
+    "name": "name_to_handle_at",
+    "entry_point": "sys_name_to_handle_at"
+  },
+  {
+    "number": 304,
+    "abi": "common",
+    "name": "open_by_handle_at",
+    "entry_point": "sys_open_by_handle_at"
+  },
+  {
+    "number": 305,
+    "abi": "common",
+    "name": "clock_adjtime",
+    "entry_point": "sys_clock_adjtime"
+  },
+  {
+    "number": 306,
+    "abi": "common",
+    "name": "syncfs",
+    "entry_point": "sys_syncfs"
+  },
+  {
+    "number": 307,
+    "abi": "64",
+    "name": "sendmmsg",
+    "entry_point": "sys_sendmmsg"
+  },
+  {
+    "number": 308,
+    "abi": "common",
+    "name": "setns",
+    "entry_point": "sys_setns"
+  },
+  {
+    "number": 309,
+    "abi": "common",
+    "name": "getcpu",
+    "entry_point": "sys_getcpu"
+  },
+  {
+    "number": 310,
+    "abi": "64",
+    "name": "process_vm_readv",
+    "entry_point": "sys_process_vm_readv"
+  },
+  {
+    "number": 311,
+    "abi": "64",
+    "name": "process_vm_writev",
+    "entry_point": "sys_process_vm_writev"
+  },
+  {
+    "number": 312,
+    "abi": "common",
+    "name": "kcmp",
+    "entry_point": "sys_kcmp"
+  },
+  {
+    "number": 313,
+    "abi": "common",
+    "name": "finit_module",
+    "entry_point": "sys_finit_module"
+  },
+  {
+    "number": 314,
+    "abi": "common",
+    "name": "sched_setattr",
+    "entry_point": "sys_sched_setattr"
+  },
+  {
+    "number": 315,
+    "abi": "common",
+    "name": "sched_getattr",
+    "entry_point": "sys_sched_getattr"
+  },
+  {
+    "number": 316,
+    "abi": "common",
+    "name": "renameat2",
+    "entry_point": "sys_renameat2"
+  },
+  {
+    "number": 317,
+    "abi": "common",
+    "name": "seccomp",
+    "entry_point": "sys_seccomp"
+  },
+  {
+    "number": 318,
+    "abi": "common",
+    "name": "getrandom",
+    "entry_point": "sys_getrandom"
+  },
+  {
+    "number": 319,
+    "abi": "common",
+    "name": "memfd_create",
+    "entry_point": "sys_memfd_create"
+  },
+  {
+    "number": 320,
+    "abi": "common",
+    "name": "kexec_file_load",
+    "entry_point": "sys_kexec_file_load"
+  },
+  {
+    "number": 321,
+    "abi": "common",
+    "name": "bpf",
+    "entry_point": "sys_bpf"
+  },
+  {
+    "number": 322,
+    "abi": "64",
+    "name": "execveat",
+    "entry_point": "sys_execveat"
+  },
+  {
+    "number": 323,
+    "abi": "common",
+    "name": "userfaultfd",
+    "entry_point": "sys_userfaultfd"
+  },
+  {
+    "number": 324,
+    "abi": "common",
+    "name": "membarrier",
+    "entry_point": "sys_membarrier"
+  },
+  {
+    "number": 325,
+    "abi": "common",
+    "name": "mlock2",
+    "entry_point": "sys_mlock2"
+  },
+  {
+    "number": 326,
+    "abi": "common",
+    "name": "copy_file_range",
+    "entry_point": "sys_copy_file_range"
+  },
+  {
+    "number": 327,
+    "abi": "64",
+    "name": "preadv2",
+    "entry_point": "sys_preadv2"
+  },
+  {
+    "number": 328,
+    "abi": "64",
+    "name": "pwritev2",
+    "entry_point": "sys_pwritev2"
+  },
+  {
+    "number": 329,
+    "abi": "common",
+    "name": "pkey_mprotect",
+    "entry_point": "sys_pkey_mprotect"
+  },
+  {
+    "number": 330,
+    "abi": "common",
+    "name": "pkey_alloc",
+    "entry_point": "sys_pkey_alloc"
+  },
+  {
+    "number": 331,
+    "abi": "common",
+    "name": "pkey_free",
+    "entry_point": "sys_pkey_free"
+  },
+  {
+    "number": 332,
+    "abi": "common",
+    "name": "statx",
+    "entry_point": "sys_statx"
+  },
+  {
+    "number": 333,
+    "abi": "common",
+    "name": "io_pgetevents",
+    "entry_point": "sys_io_pgetevents"
+  },
+  {
+    "number": 334,
+    "abi": "common",
+    "name": "rseq",
+    "entry_point": "sys_rseq"
+  },
+  {
+    "number": 335,
+    "abi": "common",
+    "name": "uretprobe",
+    "entry_point": "sys_uretprobe"
+  },
+  {
+    "number": 424,
+    "abi": "common",
+    "name": "pidfd_send_signal",
+    "entry_point": "sys_pidfd_send_signal"
+  },
+  {
+    "number": 425,
+    "abi": "common",
+    "name": "io_uring_setup",
+    "entry_point": "sys_io_uring_setup"
+  },
+  {
+    "number": 426,
+    "abi": "common",
+    "name": "io_uring_enter",
+    "entry_point": "sys_io_uring_enter"
+  },
+  {
+    "number": 427,
+    "abi": "common",
+    "name": "io_uring_register",
+    "entry_point": "sys_io_uring_register"
+  },
+  {
+    "number": 428,
+    "abi": "common",
+    "name": "open_tree",
+    "entry_point": "sys_open_tree"
+  },
+  {
+    "number": 429,
+    "abi": "common",
+    "name": "move_mount",
+    "entry_point": "sys_move_mount"
+  },
+  {
+    "number": 430,
+    "abi": "common",
+    "name": "fsopen",
+    "entry_point": "sys_fsopen"
+  },
+  {
+    "number": 431,
+    "abi": "common",
+    "name": "fsconfig",
+    "entry_point": "sys_fsconfig"
+  },
+  {
+    "number": 432,
+    "abi": "common",
+    "name": "fsmount",
+    "entry_point": "sys_fsmount"
+  },
+  {
+    "number": 433,
+    "abi": "common",
+    "name": "fspick",
+    "entry_point": "sys_fspick"
+  },
+  {
+    "number": 434,
+    "abi": "common",
+    "name": "pidfd_open",
+    "entry_point": "sys_pidfd_open"
+  },
+  {
+    "number": 435,
+    "abi": "common",
+    "name": "clone3",
+    "entry_point": "sys_clone3"
+  },
+  {
+    "number": 436,
+    "abi": "common",
+    "name": "close_range",
+    "entry_point": "sys_close_range"
+  },
+  {
+    "number": 437,
+    "abi": "common",
+    "name": "openat2",
+    "entry_point": "sys_openat2"
+  },
+  {
+    "number": 438,
+    "abi": "common",
+    "name": "pidfd_getfd",
+    "entry_point": "sys_pidfd_getfd"
+  },
+  {
+    "number": 439,
+    "abi": "common",
+    "name": "faccessat2",
+    "entry_point": "sys_faccessat2"
+  },
+  {
+    "number": 440,
+    "abi": "common",
+    "name": "process_madvise",
+    "entry_point": "sys_process_madvise"
+  },
+  {
+    "number": 441,
+    "abi": "common",
+    "name": "epoll_pwait2",
+    "entry_point": "sys_epoll_pwait2"
+  },
+  {
+    "number": 442,
+    "abi": "common",
+    "name": "mount_setattr",
+    "entry_point": "sys_mount_setattr"
+  },
+  {
+    "number": 443,
+    "abi": "common",
+    "name": "quotactl_fd",
+    "entry_point": "sys_quotactl_fd"
+  },
+  {
+    "number": 444,
+    "abi": "common",
+    "name": "landlock_create_ruleset",
+    "entry_point": "sys_landlock_create_ruleset"
+  },
+  {
+    "number": 445,
+    "abi": "common",
+    "name": "landlock_add_rule",
+    "entry_point": "sys_landlock_add_rule"
+  },
+  {
+    "number": 446,
+    "abi": "common",
+    "name": "landlock_restrict_self",
+    "entry_point": "sys_landlock_restrict_self"
+  },
+  {
+    "number": 447,
+    "abi": "common",
+    "name": "memfd_secret",
+    "entry_point": "sys_memfd_secret"
+  },
+  {
+    "number": 448,
+    "abi": "common",
+    "name": "process_mrelease",
+    "entry_point": "sys_process_mrelease"
+  },
+  {
+    "number": 449,
+    "abi": "common",
+    "name": "futex_waitv",
+    "entry_point": "sys_futex_waitv"
+  },
+  {
+    "number": 450,
+    "abi": "common",
+    "name": "set_mempolicy_home_node",
+    "entry_point": "sys_set_mempolicy_home_node"
+  },
+  {
+    "number": 451,
+    "abi": "common",
+    "name": "cachestat",
+    "entry_point": "sys_cachestat"
+  },
+  {
+    "number": 452,
+    "abi": "common",
+    "name": "fchmodat2",
+    "entry_point": "sys_fchmodat2"
+  },
+  {
+    "number": 453,
+    "abi": "common",
+    "name": "map_shadow_stack",
+    "entry_point": "sys_map_shadow_stack"
+  },
+  {
+    "number": 454,
+    "abi": "common",
+    "name": "futex_wake",
+    "entry_point": "sys_futex_wake"
+  },
+  {
+    "number": 455,
+    "abi": "common",
+    "name": "futex_wait",
+    "entry_point": "sys_futex_wait"
+  },
+  {
+    "number": 456,
+    "abi": "common",
+    "name": "futex_requeue",
+    "entry_point": "sys_futex_requeue"
+  },
+  {
+    "number": 457,
+    "abi": "common",
+    "name": "statmount",
+    "entry_point": "sys_statmount"
+  },
+  {
+    "number": 458,
+    "abi": "common",
+    "name": "listmount",
+    "entry_point": "sys_listmount"
+  },
+  {
+    "number": 459,
+    "abi": "common",
+    "name": "lsm_get_self_attr",
+    "entry_point": "sys_lsm_get_self_attr"
+  },
+  {
+    "number": 460,
+    "abi": "common",
+    "name": "lsm_set_self_attr",
+    "entry_point": "sys_lsm_set_self_attr"
+  },
+  {
+    "number": 461,
+    "abi": "common",
+    "name": "lsm_list_modules",
+    "entry_point": "sys_lsm_list_modules"
+  },
+  {
+    "number": 462,
+    "abi": "common",
+    "name": "mseal",
+    "entry_point": "sys_mseal"
+  },
+  {
+    "number": 463,
+    "abi": "common",
+    "name": "setxattrat",
+    "entry_point": "sys_setxattrat"
+  },
+  {
+    "number": 464,
+    "abi": "common",
+    "name": "getxattrat",
+    "entry_point": "sys_getxattrat"
+  },
+  {
+    "number": 465,
+    "abi": "common",
+    "name": "listxattrat",
+    "entry_point": "sys_listxattrat"
+  },
+  {
+    "number": 466,
+    "abi": "common",
+    "name": "removexattrat",
+    "entry_point": "sys_removexattrat"
+  },
+  {
+    "number": 467,
+    "abi": "common",
+    "name": "open_tree_attr",
+    "entry_point": "sys_open_tree_attr"
+  },
+  {
+    "number": 468,
+    "abi": "common",
+    "name": "file_getattr",
+    "entry_point": "sys_file_getattr"
+  },
+  {
+    "number": 469,
+    "abi": "common",
+    "name": "file_setattr",
+    "entry_point": "sys_file_setattr"
+  },
+  {
+    "number": 512,
+    "abi": "x32",
+    "name": "rt_sigaction",
+    "entry_point": "compat_sys_rt_sigaction"
+  },
+  {
+    "number": 513,
+    "abi": "x32",
+    "name": "rt_sigreturn",
+    "entry_point": "compat_sys_x32_rt_sigreturn"
+  },
+  {
+    "number": 514,
+    "abi": "x32",
+    "name": "ioctl",
+    "entry_point": "compat_sys_ioctl"
+  },
+  {
+    "number": 515,
+    "abi": "x32",
+    "name": "readv",
+    "entry_point": "sys_readv"
+  },
+  {
+    "number": 516,
+    "abi": "x32",
+    "name": "writev",
+    "entry_point": "sys_writev"
+  },
+  {
+    "number": 517,
+    "abi": "x32",
+    "name": "recvfrom",
+    "entry_point": "compat_sys_recvfrom"
+  },
+  {
+    "number": 518,
+    "abi": "x32",
+    "name": "sendmsg",
+    "entry_point": "compat_sys_sendmsg"
+  },
+  {
+    "number": 519,
+    "abi": "x32",
+    "name": "recvmsg",
+    "entry_point": "compat_sys_recvmsg"
+  },
+  {
+    "number": 520,
+    "abi": "x32",
+    "name": "execve",
+    "entry_point": "compat_sys_execve"
+  },
+  {
+    "number": 521,
+    "abi": "x32",
+    "name": "ptrace",
+    "entry_point": "compat_sys_ptrace"
+  },
+  {
+    "number": 522,
+    "abi": "x32",
+    "name": "rt_sigpending",
+    "entry_point": "compat_sys_rt_sigpending"
+  },
+  {
+    "number": 523,
+    "abi": "x32",
+    "name": "rt_sigtimedwait",
+    "entry_point": "compat_sys_rt_sigtimedwait_time64"
+  },
+  {
+    "number": 524,
+    "abi": "x32",
+    "name": "rt_sigqueueinfo",
+    "entry_point": "compat_sys_rt_sigqueueinfo"
+  },
+  {
+    "number": 525,
+    "abi": "x32",
+    "name": "sigaltstack",
+    "entry_point": "compat_sys_sigaltstack"
+  },
+  {
+    "number": 526,
+    "abi": "x32",
+    "name": "timer_create",
+    "entry_point": "compat_sys_timer_create"
+  },
+  {
+    "number": 527,
+    "abi": "x32",
+    "name": "mq_notify",
+    "entry_point": "compat_sys_mq_notify"
+  },
+  {
+    "number": 528,
+    "abi": "x32",
+    "name": "kexec_load",
+    "entry_point": "compat_sys_kexec_load"
+  },
+  {
+    "number": 529,
+    "abi": "x32",
+    "name": "waitid",
+    "entry_point": "compat_sys_waitid"
+  },
+  {
+    "number": 530,
+    "abi": "x32",
+    "name": "set_robust_list",
+    "entry_point": "compat_sys_set_robust_list"
+  },
+  {
+    "number": 531,
+    "abi": "x32",
+    "name": "get_robust_list",
+    "entry_point": "compat_sys_get_robust_list"
+  },
+  {
+    "number": 532,
+    "abi": "x32",
+    "name": "vmsplice",
+    "entry_point": "sys_vmsplice"
+  },
+  {
+    "number": 533,
+    "abi": "x32",
+    "name": "move_pages",
+    "entry_point": "sys_move_pages"
+  },
+  {
+    "number": 534,
+    "abi": "x32",
+    "name": "preadv",
+    "entry_point": "compat_sys_preadv64"
+  },
+  {
+    "number": 535,
+    "abi": "x32",
+    "name": "pwritev",
+    "entry_point": "compat_sys_pwritev64"
+  },
+  {
+    "number": 536,
+    "abi": "x32",
+    "name": "rt_tgsigqueueinfo",
+    "entry_point": "compat_sys_rt_tgsigqueueinfo"
+  },
+  {
+    "number": 537,
+    "abi": "x32",
+    "name": "recvmmsg",
+    "entry_point": "compat_sys_recvmmsg_time64"
+  },
+  {
+    "number": 538,
+    "abi": "x32",
+    "name": "sendmmsg",
+    "entry_point": "compat_sys_sendmmsg"
+  },
+  {
+    "number": 539,
+    "abi": "x32",
+    "name": "process_vm_readv",
+    "entry_point": "sys_process_vm_readv"
+  },
+  {
+    "number": 540,
+    "abi": "x32",
+    "name": "process_vm_writev",
+    "entry_point": "sys_process_vm_writev"
+  },
+  {
+    "number": 541,
+    "abi": "x32",
+    "name": "setsockopt",
+    "entry_point": "sys_setsockopt"
+  },
+  {
+    "number": 542,
+    "abi": "x32",
+    "name": "getsockopt",
+    "entry_point": "sys_getsockopt"
+  },
+  {
+    "number": 543,
+    "abi": "x32",
+    "name": "io_setup",
+    "entry_point": "compat_sys_io_setup"
+  },
+  {
+    "number": 544,
+    "abi": "x32",
+    "name": "io_submit",
+    "entry_point": "compat_sys_io_submit"
+  },
+  {
+    "number": 545,
+    "abi": "x32",
+    "name": "execveat",
+    "entry_point": "compat_sys_execveat"
+  },
+  {
+    "number": 546,
+    "abi": "x32",
+    "name": "preadv2",
+    "entry_point": "compat_sys_preadv64v2"
+  },
+  {
+    "number": 547,
+    "abi": "x32",
+    "name": "pwritev2",
+    "entry_point": "compat_sys_pwritev64v2"
+  }
+]
