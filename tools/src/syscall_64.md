@@ -4,7 +4,7 @@ SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 Original work from <https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/arch/x86/entry/syscalls/syscall_64.tbl>
 
 The format is:
-```<number> <abi> <name> <entry point> [<compat entry point> [noreturn]]```
+```<number> <abi> <name> [<compat entry point>] [noreturn]```
 
 The `__x64_sys_*()` stubs are created on-the-fly for `sys_*()` system calls
 
@@ -146,7 +146,7 @@ The abi is "common", "64" or "x32" for this file.
 | 131 | 64 | sigaltstack |  sys_sigaltstack | - |
 | 132 | common | utime   | sys_utime | - |
 | 133 | common | mknod   | sys_mknod | - |
-| 134 | 64 | uselib | - |
+| 134 | 64 | uselib | - | - |
 | 135 | common | personality |  sys_personality | - |
 | 136 | common | ustat   | sys_ustat | - |
 | 137 | common | statfs   | sys_statfs | - |
@@ -186,18 +186,18 @@ The abi is "common", "64" or "x32" for this file.
 | 171 | common | setdomainname |  sys_setdomainname | - |
 | 172 | common | iopl   | sys_iopl | - |
 | 173 | common | ioperm   | sys_ioperm | - |
-| 174 | 64 | create_module | - |
+| 174 | 64 | create_module | - | - |
 | 175 | common | init_module |  sys_init_module | - |
 | 176 | common | delete_module |  sys_delete_module | - |
-| 177 | 64 | get_kernel_syms | - |
-| 178 | 64 | query_module | - |
+| 177 | 64 | get_kernel_syms | - | - |
+| 178 | 64 | query_module | - | - |
 | 179 | common | quotactl |  sys_quotactl | - |
-| 180 | 64 | nfsservctl | - |
-| 181 | common | getpmsg | - |
-| 182 | common | putpmsg | - |
-| 183 | common | afs_syscall | - |
-| 184 | common | tuxcall | - |
-| 185 | common | security | - |
+| 180 | 64 | nfsservctl | - | - |
+| 181 | common | getpmsg | - | - |
+| 182 | common | putpmsg | - | - |
+| 183 | common | afs_syscall | - | - |
+| 184 | common | tuxcall | - | - |
+| 185 | common | security | - | - |
 | 186 | common | gettid   | sys_gettid | - |
 | 187 | common | readahead |  sys_readahead | - |
 | 188 | common | setxattr |  sys_setxattr | - |
@@ -217,17 +217,17 @@ The abi is "common", "64" or "x32" for this file.
 | 202 | common | futex   | sys_futex | - |
 | 203 | common | sched_setaffinity | sys_sched_setaffinity | - |
 | 204 | common | sched_getaffinity | sys_sched_getaffinity | - |
-| 205 | 64 | set_thread_area | - |
+| 205 | 64 | set_thread_area | - | - |
 | 206 | 64 | io_setup |  sys_io_setup | - |
 | 207 | common | io_destroy |  sys_io_destroy | - |
 | 208 | common | io_getevents |  sys_io_getevents | - |
 | 209 | 64 | io_submit |  sys_io_submit | - |
 | 210 | common | io_cancel |  sys_io_cancel | - |
-| 211 | 64 | get_thread_area | - |
-| 212 | common | lookup_dcookie | - |
+| 211 | 64 | get_thread_area | - | - |
+| 212 | common | lookup_dcookie | - | - |
 | 213 | common | epoll_create |  sys_epoll_create | - |
-| 214 | 64 | epoll_ctl_old | - |
-| 215 | 64 | epoll_wait_old | - |
+| 214 | 64 | epoll_ctl_old | - | - |
+| 215 | 64 | epoll_wait_old | - | - |
 | 216 | common | remap_file_pages | sys_remap_file_pages | - |
 | 217 | common | getdents64 |  sys_getdents64 | - |
 | 218 | common | set_tid_address |  sys_set_tid_address | - |

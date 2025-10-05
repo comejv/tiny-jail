@@ -1,16 +1,16 @@
 [package]
-name = "your-crate"
+name = "tiny-jail"
 version = "0.0.0"
 edition = "2024"
 authors = ["Côme VINCENT <come.vincent@polytechnique.edu>"]
 license = "GPL-3.0"
-description = "Seccomp filter generation using functional syscall groups"
+description = "Seccomp filter generation using functional syscall groups and fuzzing"
 repository = "https://github.com/comejv/tiny-jail"
-keywords = ["seccomp", "security", "syscall", "sandbox"]
+keywords = ["seccomp", "security", "syscall", "sandbox", "fuzzing"]
 categories = ["os::linux-apis"]
 
 [dependencies]
-seccomp = "0.1.2"
+seccompiler = "0.5.0"
 serde_json = "1.0.145"
 
 [dev-dependencies]
