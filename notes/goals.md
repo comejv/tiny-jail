@@ -25,18 +25,20 @@ The project will be aimed at **X86_64 Linux systems** and tested on CachyOS.
 - [ ] parsing sandboxing rules from a file
     - [ ] defining the format of the file, preferably as an **OCI-compliant JSON structure**
     - [ ] parsing the file to define the required list of system calls (`syscalls`) and a mandatory `defaultAction`
+- [ ] "complain mode" to log violations of the sandboxing rules
+- [ ] "enforce mode" to kill the process if a violation is detected
 
 ### Additional Features
 
 - [ ] Implementing a **Hybrid Coverage-Guided Policy Generation** system which includes:
     - [ ] **Static Pre-Analysis** to establish a secure, restrictive baseline (Deny-by-Default posture).
-    - [ ] **Coverage-Guided Fuzzing Refinement** to maximize execution path coverage and iteratively update the policy.
+    - [ ] **Coverage-Guided Fuzzing Refinement** to maximize execution path coverage and iteratively update the policy -> libAfl.
     - [ ] **Fuzzing Refinement Loop** using the loaded BPF filter to detect crashes/trace events (SECCOMP_RET_KILL) caused by undiscovered syscalls.
 - [ ] Providing a TUI to configure the sandboxing rules and generating the configuration file (outputting OCI-compliant JSON).
 - [ ] Logging of the system calls, possibly by using the `SCMP_ACT_LOG` action.
-- [ ] **Intercepting and dynamically allowing system calls** using the advanced `SCMP_ACT_NOTIFY` action. This requires setting up a `listenerPath` (UNIX domain socket) to receive the container process state.
 - [ ] Implementing **Syscall Argument Filtering** to achieve true Least Privilege compliance by generating complex BPF rules that check register values (arguments).
-- [ ] Optimizing BPF filters for performance by prioritizing frequently used, low-risk syscalls (e.g., `read`, `write`) to minimize instruction count and reduce the **5.84 microsecond overhead per syscall** observed in high-frequency applications.
+- [ ] Exposing an API to allow for another instance of tiny-jail to monitor the first instance and dynamically update the BPF filter (through `SCMP_ACT_NOTIFY`, asking notify daemon what should be done about a new syscall).
+- [ ] Show “which syscalls seen / which missed”, timeline view, --explain SYS_open to show call sites if available.
 
 ## Personal goals
 
