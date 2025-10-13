@@ -1,12 +1,20 @@
 use clap::{ArgAction, Args, Parser, Subcommand};
 use log2::*;
-use std::error::Error;
+use thiserror::Error;
 
-mod commands;
-mod profile;
+use tiny_jail::actions::Action;
+use tiny_jail::commands::{filtered_exec, fuzz_exec, CommandError};
+use tiny_jail::filters::{load_profile, ProfileError};
 
-use crate::commands::{filtered_exec, fuzz_exec};
-use crate::profile::load_profile;
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("Profile loading failed: {0}")]
+    Profile(#[from] ProfileError),
+    #[error("Command execution failed: {0}")]
+    Command(#[from] CommandError),
+    #[error("{0}")]
+    Message(String),
+}
 
 #[derive(Parser, Debug)]
 #[command(author, version)]
@@ -18,30 +26,34 @@ struct Cli {
     #[arg(long, value_name = "FILE")]
     profile: Option<String>,
 
-    /// Use OCI profile format.
-    ///
-    /// When this flag is set, the tool will interpret and generate profiles
-    /// using the OCI (Open Container Initiative) format.
-    #[arg(long)]
-    oci: bool,
+    /// Default action for syscalls not specified in the profile.
+    /// This will override the default action in the profile.
+    #[arg(short = 'd', long, value_enum)]
+    default_action: Option<Action>,
 
-    /// Kill processes with the specified signal.
+    /// Default errno return value for SCMP_ACT_ERRNO actions.
+    /// This will override the errno_ret in the profile.
+    #[arg(long, value_name = "ERRNO_VALUE")]
+    default_errno: Option<u32>,
+
+    /// Kill processes that call the specified syscall name.
     ///
     /// Will be enforced in addition to the specified profile.
-    /// Can be specified multiple times to send different signals.
-    /// For example: `-k 9 -k 15`
-    #[arg(short = 'k', long, value_name = "SIGNAL", action = ArgAction::Append)]
-    kill: Vec<i32>,
+    /// Can be specified multiple times.
+    /// For example: -k write -k read
+    #[arg(short = 'k', long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
+    kill: Vec<String>,
 
-    /// Log processes with the specified signal.
+    /// Log processes that call the specified syscall name.
     ///
     /// Will be enforced in addition to the specified profile.
-    /// Similar to --kill, this can be specified multiple times.
-    #[arg(short = 'l', long, value_name = "SIGNAL", action = ArgAction::Append)]
-    log: Vec<i32>,
+    /// Can be specified multiple times.
+    /// For example: -l write -l read
+    #[arg(short = 'l', long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
+    log: Vec<String>,
 
     /// Set log level to debug (default: info).
-    #[arg(short = 'd', long)]
+    #[arg(short = 'D', long)]
     debug: bool,
 
     /// Allow executable to see the environment variables.
@@ -119,7 +131,7 @@ fn main() {
     }
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<(), AppError> {
     let cli = Cli::parse();
 
     let _log2 = log2::stdout()
@@ -128,21 +140,27 @@ fn run() -> Result<(), Box<dyn Error>> {
         .start();
 
     let filter = if let Some(profile_path) = cli.profile {
-        load_profile(profile_path, cli.oci)?
+        load_profile(
+            profile_path,
+            cli.default_action,
+            cli.default_errno,
+            &cli.kill,
+            &cli.log,
+        )?
     } else {
-        return Err("No profile provided".into());
+        return Err(AppError::Message("No profile provided".to_string()));
     };
 
     match cli.command {
         Commands::Exec(exec_args) => {
-            debug!("exec args: {:?}", exec_args.exec);
+            info!("Executing command: {:?}", exec_args.exec);
             filtered_exec(filter, exec_args.exec)?;
-            println!("Exec success");
+            info!("Execution finished.");
         }
         Commands::Fuzz(fuzz_args) => {
-            debug!("fuzz args: {:?}", fuzz_args.exec);
+            info!("Fuzzing command: {:?}", fuzz_args.exec);
             fuzz_exec(fuzz_args.exec)?;
-            println!("fuzzing success");
+            info!("Fuzzing finished.");
         }
     }
 
