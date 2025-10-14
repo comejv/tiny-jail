@@ -78,13 +78,35 @@ fn parse_scmp_compare_op(op: &str, value: u64) -> Result<ScmpCompareOp, ProfileE
 }
 
 pub fn load_profile(
-    profile_path: String,
+    profile_path: Option<String>,
     default_action_override: Option<Action>,
     default_errno_ret_override: Option<u32>,
     kill_syscalls: &[String],
     log_syscalls: &[String],
+    log_allowed: bool,
 ) -> Result<ScmpFilterContext, ProfileError> {
-    info!("Parsing OCI profile: {}", profile_path);
+    if profile_path.is_none() {
+        info!("No profile provided, using default action: Allow + parameter override");
+        let mut ctx = ScmpFilterContext::new(Action::Allow.to_scmp_action(None))?;
+
+        // Apply kill_syscalls overrides
+        for syscall_name in kill_syscalls {
+            let syscall = ScmpSyscall::from_name(syscall_name)?;
+            ctx.add_rule(ScmpAction::KillThread, syscall)?;
+            debug!("Adding kill rule for syscall: {}", syscall_name);
+        }
+
+        // Apply log_syscalls overrides
+        for syscall_name in log_syscalls {
+            let syscall = ScmpSyscall::from_name(syscall_name)?;
+            ctx.add_rule(ScmpAction::Log, syscall)?;
+            debug!("Adding log rule for syscall: {}", syscall_name);
+        }
+
+        return Ok(ctx);
+    }
+    let profile_path = profile_path.unwrap();
+    debug!("Parsing OCI profile: {}", profile_path);
     let profile_content = fs::read_to_string(profile_path)?;
     let oci_seccomp: OciSeccomp = serde_json::from_str(&profile_content)?;
 
@@ -96,14 +118,32 @@ pub fn load_profile(
 
     let mut ctx = ScmpFilterContext::new(default_action)?;
 
+    // Add architectures from the profile
+    if !oci_seccomp.architectures.is_empty() {
+        for arch_str in &oci_seccomp.architectures {
+            let arch = ScmpArch::from_str(arch_str)?;
+            if !ctx.is_arch_present(arch)? {
+                ctx.add_arch(arch)?;
+            }
+            debug!("Adding architecture: {}", arch_str);
+        }
+    }
+
     // Process syscalls from the profile
     if let Some(syscalls) = oci_seccomp.syscalls {
         for syscall_entry in syscalls {
-            let action = syscall_entry.action.to_scmp_action(syscall_entry.errno_ret);
+            let action = (if log_allowed && syscall_entry.action == Action::Allow {
+                Action::Log
+            } else {
+                syscall_entry.action
+            })
+            .to_scmp_action(syscall_entry.errno_ret);
 
             for syscall_name in &syscall_entry.names {
                 let syscall = ScmpSyscall::from_name(syscall_name)
                     .map_err(|_| ProfileError::UnknownSyscall(syscall_name.clone()))?;
+
+                debug!("Adding rule for syscall: {}", syscall_name);
 
                 if syscall_entry.args.is_empty() {
                     // No conditions, add unconditional rule
@@ -140,22 +180,14 @@ pub fn load_profile(
     for syscall_name in kill_syscalls {
         let syscall = ScmpSyscall::from_name(syscall_name)?;
         ctx.add_rule(ScmpAction::KillThread, syscall)?;
+        debug!("Adding kill rule for syscall: {}", syscall_name);
     }
 
     // Apply log_syscalls overrides
     for syscall_name in log_syscalls {
         let syscall = ScmpSyscall::from_name(syscall_name)?;
         ctx.add_rule(ScmpAction::Log, syscall)?;
-    }
-
-    // Add architectures from the profile
-    if !oci_seccomp.architectures.is_empty() {
-        for arch_str in &oci_seccomp.architectures {
-            let arch = ScmpArch::from_str(arch_str)?;
-            if !ctx.is_arch_present(arch)? {
-                ctx.add_arch(arch)?;
-            }
-        }
+        debug!("Adding log rule for syscall: {}", syscall_name);
     }
 
     Ok(ctx)

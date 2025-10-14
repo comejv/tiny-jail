@@ -20,40 +20,8 @@ pub enum AppError {
 #[command(author, version)]
 #[command(propagate_version = true)]
 struct Cli {
-    /// Path to the profile file.
-    ///
-    /// This file is used for loading existing profiles or for generating new ones.
-    #[arg(long, value_name = "FILE")]
-    profile: Option<String>,
-
-    /// Default action for syscalls not specified in the profile.
-    /// This will override the default action in the profile.
-    #[arg(short = 'd', long, value_enum)]
-    default_action: Option<Action>,
-
-    /// Default errno return value for SCMP_ACT_ERRNO actions.
-    /// This will override the errno_ret in the profile.
-    #[arg(long, value_name = "ERRNO_VALUE")]
-    default_errno: Option<u32>,
-
-    /// Kill processes that call the specified syscall name.
-    ///
-    /// Will be enforced in addition to the specified profile.
-    /// Can be specified multiple times.
-    /// For example: -k write -k read
-    #[arg(short = 'k', long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
-    kill: Vec<String>,
-
-    /// Log processes that call the specified syscall name.
-    ///
-    /// Will be enforced in addition to the specified profile.
-    /// Can be specified multiple times.
-    /// For example: -l write -l read
-    #[arg(short = 'l', long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
-    log: Vec<String>,
-
     /// Set log level to debug (default: info).
-    #[arg(short = 'D', long)]
+    #[arg(short = 'd', long)]
     debug: bool,
 
     /// Allow executable to see the environment variables.
@@ -112,6 +80,42 @@ struct FuzzArgs {
 
 #[derive(Args, Debug)]
 struct ExecArgs {
+    /// Path to the profile file.
+    ///
+    /// This file is used for loading existing profiles or for generating new ones.
+    #[arg(long, value_name = "FILE")]
+    profile: Option<String>,
+
+    /// Default action for syscalls not specified in the profile.
+    /// This will override the default action in the profile.
+    #[arg(short = 'd', long, value_enum)]
+    default_action: Option<Action>,
+
+    /// Default errno return value for SCMP_ACT_ERRNO actions.
+    /// This will override the errno_ret in the profile.
+    #[arg(short = 'e', long, value_name = "ERRNO_VALUE")]
+    default_errno: Option<u32>,
+
+    /// Kill processes that call the specified syscall name.
+    ///
+    /// Will be enforced in addition to the specified profile.
+    /// Can be specified multiple times.
+    /// For example: -k write -k read
+    #[arg(short = 'k', long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
+    kill: Vec<String>,
+
+    /// Log processes that call the specified syscall name.
+    ///
+    /// Will be enforced in addition to the specified profile.
+    /// Can be specified multiple times.
+    /// For example: -l write -l read
+    #[arg(short = 'l', long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
+    log: Vec<String>,
+
+    /// Change all SCMP_ACT_ALLOW rules to SCMP_ACT_LOG and show the logs in the output.
+    #[arg(short = 'v', long = "show-logs")]
+    show_log: bool,
+
     /// The executable command to run and its arguments.
     ///
     /// All arguments after this are treated as arguments for the executable.
@@ -126,7 +130,7 @@ struct ExecArgs {
 
 fn main() {
     if let Err(e) = run() {
-        eprintln!("Error: {}", e);
+        error!("Error: {}", e);
         std::process::exit(1);
     }
 }
@@ -139,27 +143,26 @@ fn run() -> Result<(), AppError> {
         .level(if cli.debug { "debug" } else { "info" })
         .start();
 
-    let filter = if let Some(profile_path) = cli.profile {
-        load_profile(
-            profile_path,
-            cli.default_action,
-            cli.default_errno,
-            &cli.kill,
-            &cli.log,
-        )?
-    } else {
-        return Err(AppError::Message("No profile provided".to_string()));
-    };
-
     match cli.command {
         Commands::Exec(exec_args) => {
-            info!("Executing command: {:?}", exec_args.exec);
-            filtered_exec(filter, exec_args.exec)?;
+            let filter = load_profile(
+                exec_args.profile,
+                exec_args.default_action,
+                exec_args.default_errno,
+                &exec_args.kill,
+                &exec_args.log,
+                exec_args.show_log,
+            )?;
+
+            info!("Running the given command...");
+            debug!("Command: {:?}", exec_args.exec);
+            filtered_exec(filter, exec_args.exec, cli.env, exec_args.show_log)?;
             info!("Execution finished.");
         }
         Commands::Fuzz(fuzz_args) => {
-            info!("Fuzzing command: {:?}", fuzz_args.exec);
-            fuzz_exec(fuzz_args.exec)?;
+            info!("Fuzzing the given command...");
+            debug!("Command: {:?}", fuzz_args.exec);
+            fuzz_exec(fuzz_args.exec, cli.env)?;
             info!("Fuzzing finished.");
         }
     }
