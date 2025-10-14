@@ -2,7 +2,7 @@ name: Rust Release
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,69 +13,164 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0 # Important for comparing history
-    
-    - name: Install libseccomp-dev
-      run: sudo apt-get update && sudo apt-get install -y libseccomp-dev
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Get current version from Cargo.toml
-      id: get_version
-      run: |
-        current_version=$(grep '^version' Cargo.toml | head -n 1 | cut -d '"' -f 2)
-        echo "CURRENT_VERSION=$current_version" >> $GITHUB_OUTPUT
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libseccomp-dev jq
 
-    - name: Get latest release tag
-      id: get_latest_tag
-      run: |
-        latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
-        echo "LATEST_TAG=$latest_tag" >> $GITHUB_OUTPUT
+      - name: Get package name and version from Cargo.toml
+        id: cargo_meta
+        shell: bash
+        run: |
+          pkg_name=$(grep -m1 '^name\s*=' Cargo.toml | cut -d '"' -f 2)
+          version=$(grep -m1 '^version\s*=' Cargo.toml | cut -d '"' -f 2)
+          echo "name=$pkg_name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
-    - name: Compare versions and create release
-      id: create_release
-      if: steps.get_version.outputs.CURRENT_VERSION != steps.get_latest_tag.outputs.LATEST_TAG
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        NEW_VERSION=${{ steps.get_version.outputs.CURRENT_VERSION }}
-        LAST_TAG=${{ steps.get_latest_tag.outputs.LATEST_TAG }}
-
-        echo "Current Cargo.toml version: $NEW_VERSION"
-        echo "Latest Git tag: $LAST_TAG"
-
-        if [ "$NEW_VERSION" != "$LAST_TAG" ]; then
-          echo "Version has changed from $LAST_TAG to $NEW_VERSION. Creating a new release."
+      - name: Ensure tag exists (create or move tag)
+        id: ensure_tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.cargo_meta.outputs.tag }}"
 
           # Configure Git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Create and push tag
-          git tag -a v$NEW_VERSION -m "Release v$NEW_VERSION"
-          git push origin v$NEW_VERSION
+          # Check if tag exists remotely
+          if git ls-remote --tags origin | grep -q "refs/tags/${tag}$"; then
+            echo "Tag ${tag} exists on origin. Re-pointing it to HEAD of main."
+            # Delete remote and local tag, then recreate
+            git tag -d "${tag}" || true
+            git push origin ":refs/tags/${tag}" || true
+          else
+            echo "Tag ${tag} does not exist on origin. Will create."
+          fi
 
-          # Create GitHub Release
-          curl -sS -X POST \
+          # Create tag at current commit and push
+          git tag -a "${tag}" -m "Release ${tag}"
+          git push origin "${tag}"
+
+      - name: Build release binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Build a stripped release binary
+          RUSTFLAGS="-C strip=symbols" cargo build --release
+          # Determine the binary path (assumes single binary crate)
+          BIN="${{ steps.cargo_meta.outputs.name }}"
+          SRC="target/release/${BIN}"
+          if [ ! -f "$SRC" ]; then
+            echo "Expected binary $SRC not found. If workspace/multiple bins, adjust selection."
+            exit 1
+          fi
+
+          # Prepare asset name with platform info
+          OS="linux"
+          ARCH="$(uname -m)"
+          VERSION="${{ steps.cargo_meta.outputs.version }}"
+          ASSET_NAME="${BIN}-v${VERSION}-${OS}-${ARCH}"
+          # Optionally compress to reduce size
+          tar czf "${ASSET_NAME}.tar.gz" -C target/release "${BIN}"
+
+          echo "asset_name=${ASSET_NAME}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "asset_path=${ASSET_NAME}.tar.gz" >> "$GITHUB_OUTPUT"
+        id: build
+
+      - name: Create or get GitHub Release for tag
+        id: upsert_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner_repo="${{ github.repository }}"
+          tag="${{ steps.cargo_meta.outputs.tag }}"
+          api="https://api.github.com/repos/${owner_repo}"
+
+          # Try to get release by tag
+          get_resp=$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
+            "${api}/releases/tags/${tag}" || true)
+
+          if echo "$get_resp" | jq -e '.id' >/dev/null 2>&1; then
+            release_id=$(echo "$get_resp" | jq -r '.id')
+            upload_url=$(echo "$get_resp" | jq -r '.upload_url' | sed 's/{?name,label}//')
+            echo "Found existing release id=${release_id} for ${tag}"
+          else
+            echo "No release for ${tag}. Creating..."
+            create_payload=$(jq -n \
+              --arg tag_name "$tag" \
+              --arg target "main" \
+              --arg name "$tag" \
+              --arg body "Release $tag" \
+              '{tag_name:$tag_name, target_commitish:$target, name:$name, body:$body, draft:false, prerelease:false}')
+
+            create_resp=$(curl -sS -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$create_payload" \
+              "${api}/releases")
+
+            release_id=$(echo "$create_resp" | jq -r '.id')
+            upload_url=$(echo "$create_resp" | jq -r '.upload_url' | sed 's/{?name,label}//')
+
+            if [ "$release_id" = "null" ] || [ -z "$release_id" ]; then
+              echo "Failed to create release: $create_resp"
+              exit 1
+            fi
+            echo "Created release id=${release_id} for ${tag}"
+          fi
+
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+          echo "upload_url=$upload_url" >> "$GITHUB_OUTPUT"
+
+      - name: Remove existing asset with same name (if any)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner_repo="${{ github.repository }}"
+          release_id="${{ steps.upsert_release.outputs.release_id }}"
+          asset_name="${{ steps.build.outputs.asset_name }}"
+          api="https://api.github.com/repos/${owner_repo}"
+
+          assets=$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
+            "${api}/releases/${release_id}/assets")
+
+          existing_id=$(echo "$assets" | jq -r ".[] | select(.name==\"${asset_name}\") | .id")
+
+          if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
+            echo "Deleting existing asset ${asset_name} (id=${existing_id})"
+            curl -sS -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
+              "${api}/releases/assets/${existing_id}"
+          else
+            echo "No existing asset named ${asset_name}."
+          fi
+
+      - name: Upload asset to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          upload_url="${{ steps.upsert_release.outputs.upload_url }}"
+          asset_path="${{ steps.build.outputs.asset_path }}"
+          asset_name="${{ steps.build.outputs.asset_name }}"
+
+          curl -sS \
             -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "tag_name": "v'$NEW_VERSION'",
-              "target_commitish": "main",
-              "name": "v'$NEW_VERSION'",
-              "body": "Release v'$NEW_VERSION'",
-              "draft": false,
-              "prerelease": false
-            }' \
-            "https://api.github.com/repos/${{ github.repository }}/releases"
-          echo "GitHub Release v$NEW_VERSION created."
-        else
-          echo "Version has not changed. No new release needed."
-        fi
+            -H "Content-Type: application/gzip" \
+            --data-binary @"${asset_path}" \
+            "${upload_url}?name=$(basename "${asset_name}")"
 
-    - name: Build
-      if: steps.get_version.outputs.CURRENT_VERSION != steps.get_latest_tag.outputs.LATEST_TAG
-      run: cargo build --verbose
-    - name: Run tests
-      if: steps.get_version.outputs.CURRENT_VERSION != steps.get_latest_tag.outputs.LATEST_TAG
-      run: cargo test --verbose
+      - name: Run tests
+        run: cargo test --verbose
