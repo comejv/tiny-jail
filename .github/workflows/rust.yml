@@ -1,0 +1,76 @@
+name: Rust Release
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Important for comparing history
+
+    - name: Get current version from Cargo.toml
+      id: get_version
+      run: |
+        current_version=$(grep '^version' Cargo.toml | head -n 1 | cut -d '"' -f 2)
+        echo "CURRENT_VERSION=$current_version" >> $GITHUB_OUTPUT
+
+    - name: Get latest release tag
+      id: get_latest_tag
+      run: |
+        latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+        echo "LATEST_TAG=$latest_tag" >> $GITHUB_OUTPUT
+
+    - name: Compare versions and create release
+      id: create_release
+      if: steps.get_version.outputs.CURRENT_VERSION != steps.get_latest_tag.outputs.LATEST_TAG
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        NEW_VERSION=${{ steps.get_version.outputs.CURRENT_VERSION }}
+        LAST_TAG=${{ steps.get_latest_tag.outputs.LATEST_TAG }}
+
+        echo "Current Cargo.toml version: $NEW_VERSION"
+        echo "Latest Git tag: $LAST_TAG"
+
+        if [ "$NEW_VERSION" != "$LAST_TAG" ]; then
+          echo "Version has changed from $LAST_TAG to $NEW_VERSION. Creating a new release."
+
+          # Configure Git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create and push tag
+          git tag -a v$NEW_VERSION -m "Release v$NEW_VERSION"
+          git push origin v$NEW_VERSION
+
+          # Create GitHub Release
+          curl -sS -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "tag_name": "v'$NEW_VERSION'",
+              "target_commitish": "main",
+              "name": "v'$NEW_VERSION'",
+              "body": "Release v'$NEW_VERSION'",
+              "draft": false,
+              "prerelease": false
+            }' \
+            "https://api.github.com/repos/${{ github.repository }}/releases"
+          echo "GitHub Release v$NEW_VERSION created."
+        else
+          echo "Version has not changed. No new release needed."
+        fi
+
+    - name: Build
+      if: steps.get_version.outputs.CURRENT_VERSION != steps.get_latest_tag.outputs.LATEST_TAG
+      run: cargo build --verbose
+    - name: Run tests
+      if: steps.get_version.outputs.CURRENT_VERSION != steps.get_latest_tag.outputs.LATEST_TAG
+      run: cargo test --verbose
