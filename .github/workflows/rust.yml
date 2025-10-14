@@ -20,7 +20,21 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libseccomp-dev jq
+          sudo apt-get install -y jq gperf build-essential autoconf automake libtool pkg-config wget ca-certificates
+
+      - name: Build and install libseccomp 2.6.x
+        run: |
+          set -euo pipefail
+          ver=2.6.0
+          wget -q https://github.com/seccomp/libseccomp/releases/download/v${ver}/libseccomp-${ver}.tar.gz
+          echo "Extracting libseccomp-${ver}.tar.gz"
+          tar xzf libseccomp-${ver}.tar.gz
+          cd libseccomp-${ver}
+          ./configure --prefix=/usr --disable-static
+          make -j"$(nproc)"
+          sudo make install
+          sudo ldconfig
+          pkg-config --modversion libseccomp
 
       - name: Get package name and version from Cargo.toml
         id: cargo_meta
