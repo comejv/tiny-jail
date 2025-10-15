@@ -7,7 +7,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
 use thiserror::Error;
 
-use crate::monitor_log::{monitor_seccomp_logs, SeccompEvent, SeccompStats};
+use crate::monitor::{monitor_seccomp_logs, SeccompEvent, SeccompStats};
 
 #[derive(Error, Debug)]
 pub enum CommandError {
@@ -178,4 +178,3 @@ pub fn filtered_exec(
 pub fn fuzz_exec(_path: Vec<String>, _pass_env: bool) -> Result<(), CommandError> {
     Err(CommandError::FuzzingNotImplemented)
 }
-
