@@ -1,6 +1,8 @@
+use libseccomp::check_version;
 use libseccomp::{error::SeccompError, ScmpFilterContext};
 use log2::*;
-use std::io;
+use nix::libc;
+use std::io::{self, Read};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::Command;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -54,8 +56,21 @@ pub fn filtered_exec(
     pass_env: bool,
     show_log: bool,
 ) -> Result<(), CommandError> {
-    // Export the filter to BPF bytecode (Send + Sync)
-    let bpf_bytes = ctx.export_bpf_mem()?;
+    let mut bpf_bytes;
+    if check_version(libseccomp::ScmpVersion::from((2, 6, 0))).unwrap() {
+        // Export the filter to BPF bytecode
+        bpf_bytes = ctx.export_bpf_mem()?;
+    } else {
+        warn!("libseccomp version is < 2.6.0, falling back to BPF export to file");
+        // Export the filter to file then load in memory
+        let (mut reader, writer) = io::pipe().map_err(CommandError::Io)?;
+        ctx.export_bpf(&writer).map_err(CommandError::LibSeccomp)?;
+        drop(writer);
+        bpf_bytes = Vec::new();
+        reader
+            .read_to_end(&mut bpf_bytes)
+            .map_err(CommandError::Io)?;
+    }
 
     let mut command = Command::new(&path[0]);
     command.args(&path[1..]);
