@@ -492,6 +492,7 @@ dependencies = [
  "libseccomp",
  "log2",
  "nix",
+ "pkg-config",
  "serde",
  "serde_json",
  "thiserror",

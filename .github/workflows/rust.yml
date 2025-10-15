@@ -81,50 +81,6 @@ jobs:
             echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check if minor/major bump (skip patch-only)
-        id: version_check
-        shell: bash
-        run: |
-          set -euo pipefail
-          current="${{ steps.cargo_meta.outputs.version }}"
-          prev="${{ steps.prev_version.outputs.previous_version }}"
-
-          IFS='.' read -r cmaj cmin cpat <<< "$current"
-          IFS='.' read -r pmaj pmin ppat <<< "$prev"
-
-          # Default false
-          is_minor_bump=false
-          reason=""
-
-          if [ -z "${pmaj:-}" ]; then
-            # First release scenario
-            is_minor_bump=true
-            reason="first release (no previous tag)"
-          elif (( cmaj > pmaj )); then
-            is_minor_bump=true
-            reason="major bump"
-          elif (( cmaj == pmaj )) && (( cmin > pmin )); then
-            is_minor_bump=true
-            reason="minor bump"
-          elif (( cmaj == pmaj )) && (( cmin == pmin )) && (( cpat > ppat )); then
-            is_minor_bump=false
-            reason="patch bump"
-          else
-            is_minor_bump=false
-            reason="no bump or downgrade"
-          fi
-
-          echo "is_minor_bump=$is_minor_bump" >> "$GITHUB_OUTPUT"
-          echo "reason=$reason" >> "$GITHUB_OUTPUT"
-          echo "Detected: $reason (prev=$prev, current=$current)"
-
-      - name: Stop early if not a minor/major bump
-        if: steps.version_check.outputs.is_minor_bump != 'true'
-        shell: bash
-        run: |
-          echo "Skipping release: ${{ steps.version_check.outputs.reason }}"
-          exit 0
-
       - name: Compute previous ref for changelog
         id: changelog_base
         shell: bash

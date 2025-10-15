@@ -2,7 +2,7 @@ use libseccomp::{error::SeccompError, ScmpFilterContext};
 use log2::*;
 use nix::libc;
 use std::io;
-#[cfg(not(feature = "libseccomp-2-6"))]
+#[cfg(not(libseccomp_2_6))]
 use std::io::Read;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::Command;
@@ -57,24 +57,23 @@ pub fn filtered_exec(
     pass_env: bool,
     show_log: bool,
 ) -> Result<(), CommandError> {
-    let bpf_bytes;
+    let bpf_bytes: Vec<u8> = {
+        #[cfg(libseccomp_2_6)]
+        {
+            ctx.export_bpf_mem()?
+        }
+        #[cfg(not(libseccomp_2_6))]
+        {
+            warn!("libseccomp version is < 2.6.0, falling back to BPF export to file");
+            let (mut reader, writer) = io::pipe().map_err(CommandError::Io)?;
+            ctx.export_bpf(&writer).map_err(CommandError::LibSeccomp)?;
+            drop(writer);
 
-    #[cfg(feature = "libseccomp-2-6")]
-    {
-        bpf_bytes = ctx.export_bpf_mem()?;
-    }
-    #[cfg(not(feature = "libseccomp-2-6"))]
-    {
-        warn!("libseccomp version is < 2.6.0, falling back to BPF export to file");
-        // Export the filter to file then load in memory
-        let (mut reader, writer) = io::pipe().map_err(CommandError::Io)?;
-        ctx.export_bpf(&writer).map_err(CommandError::LibSeccomp)?;
-        drop(writer);
-        bpf_bytes = Vec::new();
-        reader
-            .read_to_end(&mut bpf_bytes)
-            .map_err(CommandError::Io)?;
-    }
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf).map_err(CommandError::Io)?;
+            buf
+        }
+    };
 
     let mut command = Command::new(&path[0]);
     command.args(&path[1..]);
