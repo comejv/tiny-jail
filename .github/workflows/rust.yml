@@ -20,21 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq gperf build-essential autoconf automake libtool pkg-config wget ca-certificates
-
-      - name: Build and install libseccomp 2.6.x
-        run: |
-          set -euo pipefail
-          ver=2.6.0
-          wget -q https://github.com/seccomp/libseccomp/releases/download/v${ver}/libseccomp-${ver}.tar.gz
-          echo "Extracting libseccomp-${ver}.tar.gz"
-          tar xzf libseccomp-${ver}.tar.gz
-          cd libseccomp-${ver}
-          ./configure --prefix=/usr --disable-static
-          make -j"$(nproc)"
-          sudo make install
-          sudo ldconfig
-          pkg-config --modversion libseccomp
+          sudo apt-get install -y libseccomp-dev jq
 
       - name: Get package name and version from Cargo.toml
         id: cargo_meta
@@ -73,6 +59,32 @@ jobs:
           git tag -a "${tag}" -m "Release ${tag}"
           git push origin "${tag}"
 
+      - name: Get previous release tag
+        id: get_previous_tag
+        shell: bash
+        run: |
+          # Get all tags, sort by version, and find the one before the current
+          current_tag="${{ steps.cargo_meta.outputs.tag }}"
+          # Fetch all tags to ensure we have them locally
+          git fetch --tags
+          previous_tag=$(git tag --sort=-v:refname | grep -B1 "^${current_tag}$" | head -n 1)
+          if [ -z "$previous_tag" ]; then
+            echo "No previous tag found, defaulting to initial commit for log."
+            echo "previous_tag=$(git rev-list --max-parents=0 HEAD)" >> "$GITHUB_OUTPUT"
+          else
+            echo "Previous tag: $previous_tag"
+            echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate commit list for release body
+        id: generate_commit_list
+        shell: bash
+        run: |
+          commit_list=$(git log --pretty=format:"* %h %s (%an)" ${{ steps.get_previous_tag.outputs.previous_tag }}..${{ steps.cargo_meta.outputs.tag }})
+          echo "commit_list<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$commit_list" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Build release binary
         shell: bash
         run: |
@@ -92,11 +104,9 @@ jobs:
           ARCH="$(uname -m)"
           VERSION="${{ steps.cargo_meta.outputs.version }}"
           ASSET_NAME="${BIN}-v${VERSION}-${OS}-${ARCH}"
-          # Optionally compress to reduce size
-          tar czf "${ASSET_NAME}.tar.gz" -C target/release "${BIN}"
 
-          echo "asset_name=${ASSET_NAME}.tar.gz" >> "$GITHUB_OUTPUT"
-          echo "asset_path=${ASSET_NAME}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "asset_name=${ASSET_NAME}" >> "$GITHUB_OUTPUT"
+          echo "asset_path=${ASSET_NAME}" >> "$GITHUB_OUTPUT"
         id: build
 
       - name: Create or get GitHub Release for tag
@@ -124,7 +134,7 @@ jobs:
               --arg tag_name "$tag" \
               --arg target "main" \
               --arg name "$tag" \
-              --arg body "Release $tag" \
+              --arg body "Release $tag\n\nChanges:\n${{ steps.generate_commit_list.outputs.commit_list }}" \
               '{tag_name:$tag_name, target_commitish:$target, name:$name, body:$body, draft:false, prerelease:false}')
 
             create_resp=$(curl -sS -X POST \
