@@ -100,16 +100,16 @@ struct ExecArgs {
     ///
     /// Will be enforced in addition to the specified profile.
     /// Can be specified multiple times.
-    /// For example: -k write -k read
-    #[arg(short = 'k', long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
+    /// For example: --kill write --kill read
+    #[arg(long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
     kill: Vec<String>,
 
     /// Log processes that call the specified syscall name.
     ///
     /// Will be enforced in addition to the specified profile.
     /// Can be specified multiple times.
-    /// For example: -l write -l read
-    #[arg(short = 'l', long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
+    /// For example: --log write --log read
+    #[arg(long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
     log: Vec<String>,
 
     /// Change all SCMP_ACT_ALLOW rules to SCMP_ACT_LOG and show the logs in the output.

@@ -85,109 +85,105 @@ pub fn load_profile(
     log_syscalls: &[String],
     log_allowed: bool,
 ) -> Result<ScmpFilterContext, ProfileError> {
-    if profile_path.is_none() {
-        info!("No profile provided, using default action: Allow + parameter override");
-        let mut ctx = ScmpFilterContext::new(Action::Allow.to_scmp_action(None))?;
+    let mut ctx;
 
-        // Apply kill_syscalls overrides
-        for syscall_name in kill_syscalls {
-            let syscall = ScmpSyscall::from_name(syscall_name)?;
-            ctx.add_rule(ScmpAction::KillThread, syscall)?;
-            debug!("Adding kill rule for syscall: {}", syscall_name);
-        }
+    if let Some(profile_path) = profile_path {
+        debug!("Parsing OCI profile: {}", profile_path);
+        let profile_content = fs::read_to_string(profile_path)?;
+        let oci_seccomp: OciSeccomp = serde_json::from_str(&profile_content)?;
 
-        // Apply log_syscalls overrides
-        for syscall_name in log_syscalls {
-            let syscall = ScmpSyscall::from_name(syscall_name)?;
-            ctx.add_rule(ScmpAction::Log, syscall)?;
-            debug!("Adding log rule for syscall: {}", syscall_name);
-        }
+        let default_errno_ret = default_errno_ret_override.or(oci_seccomp.default_errno_ret);
 
-        return Ok(ctx);
-    }
-    let profile_path = profile_path.unwrap();
-    debug!("Parsing OCI profile: {}", profile_path);
-    let profile_content = fs::read_to_string(profile_path)?;
-    let oci_seccomp: OciSeccomp = serde_json::from_str(&profile_content)?;
+        let default_action = default_action_override
+            .unwrap_or(oci_seccomp.default_action)
+            .to_scmp_action(default_errno_ret);
 
-    let default_errno_ret = default_errno_ret_override.or(oci_seccomp.default_errno_ret);
+        ctx = ScmpFilterContext::new(default_action)?;
 
-    let default_action = default_action_override
-        .unwrap_or(oci_seccomp.default_action)
-        .to_scmp_action(default_errno_ret);
-
-    let mut ctx = ScmpFilterContext::new(default_action)?;
-
-    // Add architectures from the profile
-    if !oci_seccomp.architectures.is_empty() {
-        for arch_str in &oci_seccomp.architectures {
-            let arch = ScmpArch::from_str(arch_str)?;
-            if !ctx.is_arch_present(arch)? {
-                ctx.add_arch(arch)?;
+        // Add architectures from the profile
+        if !oci_seccomp.architectures.is_empty() {
+            for arch_str in &oci_seccomp.architectures {
+                let arch = ScmpArch::from_str(arch_str)?;
+                if !ctx.is_arch_present(arch)? {
+                    ctx.add_arch(arch)?;
+                }
+                debug!("Adding architecture: {}", arch_str);
             }
-            debug!("Adding architecture: {}", arch_str);
         }
-    }
 
-    // Process syscalls from the profile
-    if let Some(syscalls) = oci_seccomp.syscalls {
-        for syscall_entry in syscalls {
-            let action = (if log_allowed && syscall_entry.action == Action::Allow {
-                Action::Log
-            } else {
-                syscall_entry.action
-            })
-            .to_scmp_action(syscall_entry.errno_ret);
-
-            for syscall_name in &syscall_entry.names {
-                let syscall = ScmpSyscall::from_name(syscall_name)
-                    .map_err(|_| ProfileError::UnknownSyscall(syscall_name.clone()))?;
-
-                debug!("Adding rule for syscall: {}", syscall_name);
-
-                if syscall_entry.args.is_empty() {
-                    // No conditions, add unconditional rule
-                    ctx.add_rule(action, syscall)?;
+        // Process syscalls from the profile
+        if let Some(syscalls) = oci_seccomp.syscalls {
+            for syscall_entry in syscalls {
+                let action = (if log_allowed && syscall_entry.action == Action::Allow {
+                    Action::Log
                 } else {
-                    // Build comparators from args
-                    let comparators: Result<Vec<_>, ProfileError> = syscall_entry
-                        .args
-                        .iter()
-                        .map(|arg| {
-                            // For MASKED_EQ, value is the mask, value_two is the datum
-                            // For others, value is the datum
-                            let (op, datum) = if arg.op == "SCMP_CMP_MASKED_EQ" {
-                                let mask = arg.value;
-                                let datum = arg.value_two.unwrap_or(0);
-                                (ScmpCompareOp::MaskedEqual(mask), datum)
-                            } else {
-                                (parse_scmp_compare_op(&arg.op, arg.value)?, arg.value)
-                            };
+                    syscall_entry.action
+                })
+                .to_scmp_action(syscall_entry.errno_ret);
 
-                            Ok(ScmpArgCompare::new(arg.index as u32, op, datum))
-                        })
-                        .collect();
+                for syscall_name in &syscall_entry.names {
+                    let syscall = ScmpSyscall::from_name(syscall_name)
+                        .map_err(|_| ProfileError::UnknownSyscall(syscall_name.clone()))?;
 
-                    ctx.add_rule_conditional(action, syscall, &comparators?)?;
+                    debug!("Adding rule for syscall: {}", syscall_name);
+
+                    if syscall_entry.args.is_empty() {
+                        // No conditions, add unconditional rule
+                        ctx.add_rule(action, syscall)?;
+                    } else {
+                        // Build comparators from args
+                        let comparators: Result<Vec<_>, ProfileError> = syscall_entry
+                            .args
+                            .iter()
+                            .map(|arg| {
+                                // For MASKED_EQ, value is the mask, value_two is the datum
+                                // For others, value is the datum
+                                let (op, datum) = if arg.op == "SCMP_CMP_MASKED_EQ" {
+                                    let mask = arg.value;
+                                    let datum = arg.value_two.unwrap_or(0);
+                                    (ScmpCompareOp::MaskedEqual(mask), datum)
+                                } else {
+                                    (parse_scmp_compare_op(&arg.op, arg.value)?, arg.value)
+                                };
+
+                                Ok(ScmpArgCompare::new(arg.index as u32, op, datum))
+                            })
+                            .collect();
+
+                        ctx.add_rule_conditional(action, syscall, &comparators?)?;
+                    }
                 }
             }
+        } else {
+            return Err(ProfileError::NoSyscallsInProfile);
         }
     } else {
-        return Err(ProfileError::NoSyscallsInProfile);
+        info!("No profile provided, using default action: Allow + parameter override");
+        ctx = ScmpFilterContext::new(Action::Allow.to_scmp_action(None))?;
     }
 
     // Apply kill_syscalls overrides
     for syscall_name in kill_syscalls {
-        let syscall = ScmpSyscall::from_name(syscall_name)?;
-        ctx.add_rule(ScmpAction::KillThread, syscall)?;
         debug!("Adding kill rule for syscall: {}", syscall_name);
+        let syscall = ScmpSyscall::from_name(syscall_name);
+        match syscall {
+            Ok(syscall) => {
+                ctx.add_rule(ScmpAction::KillThread, syscall)?;
+            }
+            Err(e) => warn!("Could not add kill rule for syscall: {}", e),
+        };
     }
 
     // Apply log_syscalls overrides
     for syscall_name in log_syscalls {
-        let syscall = ScmpSyscall::from_name(syscall_name)?;
-        ctx.add_rule(ScmpAction::Log, syscall)?;
         debug!("Adding log rule for syscall: {}", syscall_name);
+        let syscall = ScmpSyscall::from_name(syscall_name);
+        match syscall {
+            Ok(syscall) => {
+                ctx.add_rule(ScmpAction::Log, syscall)?;
+            }
+            Err(e) => warn!("Could not add log rule for syscall: {}", e),
+        };
     }
 
     Ok(ctx)
