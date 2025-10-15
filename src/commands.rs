@@ -37,7 +37,7 @@ fn handle_exit_status(status: std::process::ExitStatus) -> Result<(), CommandErr
         warn!("Child exited with code: {}", code);
         Err(CommandError::UnexpectedExit)
     } else if let Some(signal) = status.signal() {
-        if signal == nix::libc::SIGSYS {
+        if signal == libc::SIGSYS {
             info!("Child terminated by seccomp (SIGSYS).");
             Ok(())
         } else {
@@ -78,43 +78,24 @@ pub fn filtered_exec(
         command.env_clear();
     }
 
-    // Load seccomp from BPF bytes in pre_exec
     unsafe {
         command.pre_exec(move || {
-            #[repr(C)]
-            struct SockFilter {
-                code: u16,
-                jt: u8,
-                jf: u8,
-                k: u32,
-            }
-
-            #[repr(C)]
-            struct SockFprog {
-                len: u16,
-                filter: *const SockFilter,
-            }
-
             // Each BPF instruction is 8 bytes
-            let filter_ptr = bpf_bytes.as_ptr() as *const SockFilter;
-            let filter_len = bpf_bytes.len() / 8;
+            let filter_ptr = bpf_bytes.as_ptr() as *const libc::sock_filter;
+            let filter_len = bpf_bytes.len() / std::mem::size_of::<libc::sock_filter>();
 
-            let prog = SockFprog {
+            let prog = libc::sock_fprog {
                 len: filter_len as u16,
-                filter: filter_ptr,
+                filter: filter_ptr as *mut _,
             };
 
-            let ret = nix::libc::prctl(nix::libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
-            if ret != 0 {
-                return Err(io::Error::last_os_error());
-            }
+            nix::sys::prctl::set_no_new_privs().map_err(io::Error::other)?;
 
-            let ret = nix::libc::prctl(
-                nix::libc::PR_SET_SECCOMP,
-                nix::libc::SECCOMP_MODE_FILTER,
-                &prog as *const _ as *const nix::libc::c_void,
-                0,
-                0,
+            let ret = libc::syscall(
+                libc::SYS_seccomp as libc::c_long,
+                libc::SECCOMP_SET_MODE_FILTER as libc::c_long,
+                0 as libc::c_long,
+                &prog as *const _ as *const libc::c_void,
             );
             if ret != 0 {
                 return Err(io::Error::last_os_error());
