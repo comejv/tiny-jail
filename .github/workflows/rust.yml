@@ -6,33 +6,189 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-C strip=symbols"
 
 jobs:
   release:
+    name: Release on minor/major version bump
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
+          # Need full history to compare tags and generate logs
           fetch-depth: 0
 
       - name: Install dependencies
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y libseccomp-dev jq
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
 
       - name: Get package name and version from Cargo.toml
         id: cargo_meta
         shell: bash
         run: |
-          pkg_name=$(grep -m1 '^name\s*=' Cargo.toml | cut -d '"' -f 2)
-          version=$(grep -m1 '^version\s*=' Cargo.toml | cut -d '"' -f 2)
+          set -euo pipefail
+          # robust parse via cargo metadata when available; fallback grep
+          if command -v cargo >/dev/null 2>&1; then
+            pkg_name=$(cargo metadata --no-deps --format-version=1 \
+              | jq -r '.packages[0].name')
+            version=$(cargo metadata --no-deps --format-version=1 \
+              | jq -r '.packages[0].version')
+          else
+            pkg_name=$(grep -m1 '^name\s*=' Cargo.toml | cut -d '"' -f 2)
+            version=$(grep -m1 '^version\s*=' Cargo.toml | cut -d '"' -f 2)
+          fi
           echo "name=$pkg_name" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
-      - name: Ensure tag exists (create or move tag)
+      - name: Determine previous version (semantic latest tag)
+        id: prev_version
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --prune
+          # Find latest tag matching vX.Y.Z
+          previous_tag=$(git tag --sort=-v:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | head -n 1 || true)
+          if [ -z "${previous_tag:-}" ]; then
+            echo "No previous semver tag found; assuming 0.0.0"
+            echo "previous_version=0.0.0" >> "$GITHUB_OUTPUT"
+            echo "previous_tag=" >> "$GITHUB_OUTPUT"
+          else
+            previous_version="${previous_tag#v}"
+            echo "Found previous tag: $previous_tag (version: $previous_version)"
+            echo "previous_version=$previous_version" >> "$GITHUB_OUTPUT"
+            echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check if minor/major bump (skip patch-only)
+        id: version_check
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="${{ steps.cargo_meta.outputs.version }}"
+          prev="${{ steps.prev_version.outputs.previous_version }}"
+
+          IFS='.' read -r cmaj cmin cpat <<< "$current"
+          IFS='.' read -r pmaj pmin ppat <<< "$prev"
+
+          # Default false
+          is_minor_bump=false
+          reason=""
+
+          if [ -z "${pmaj:-}" ]; then
+            # First release scenario
+            is_minor_bump=true
+            reason="first release (no previous tag)"
+          elif (( cmaj > pmaj )); then
+            is_minor_bump=true
+            reason="major bump"
+          elif (( cmaj == pmaj )) && (( cmin > pmin )); then
+            is_minor_bump=true
+            reason="minor bump"
+          elif (( cmaj == pmaj )) && (( cmin == pmin )) && (( cpat > ppat )); then
+            is_minor_bump=false
+            reason="patch bump"
+          else
+            is_minor_bump=false
+            reason="no bump or downgrade"
+          fi
+
+          echo "is_minor_bump=$is_minor_bump" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "Detected: $reason (prev=$prev, current=$current)"
+
+      - name: Stop early if not a minor/major bump
+        if: steps.version_check.outputs.is_minor_bump != 'true'
+        shell: bash
+        run: |
+          echo "Skipping release: ${{ steps.version_check.outputs.reason }}"
+          exit 0
+
+      - name: Compute previous ref for changelog
+        id: changelog_base
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Use previous tag if present, otherwise the root commit
+          if [ -n "${{ steps.prev_version.outputs.previous_tag }}" ]; then
+            echo "base_ref=${{ steps.prev_version.outputs.previous_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            root=$(git rev-list --max-parents=0 HEAD | tail -n 1)
+            echo "base_ref=$root" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate commit list for release body
+        id: generate_commit_list
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${{ steps.changelog_base.outputs.base_ref }}"
+          head="${{ steps.cargo_meta.outputs.tag }}"
+          # If base is a commit SHA, use that..HEAD; if it's a tag, also fine.
+          # Use --no-merges if you want to exclude merge commits (optional).
+          commit_list=$(git log --no-merges --pretty=format:"* %h %s (%an)" "${base}..HEAD")
+          if [ -z "$commit_list" ]; then
+            commit_list="(no changes)"
+          fi
+          echo "commit_list<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$commit_list" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          cargo test --locked --verbose
+
+      - name: Build release binary
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release
+          BIN="${{ steps.cargo_meta.outputs.name }}"
+          SRC="target/release/${BIN}"
+          if [ ! -f "$SRC" ]; then
+            echo "Expected binary $SRC not found. If workspace/multiple bins, adjust selection."
+            exit 1
+          fi
+
+          OS="linux"
+          ARCH="$(uname -m)"
+          VERSION="${{ steps.cargo_meta.outputs.version }}"
+          ASSET_NAME="${BIN}-v${VERSION}-${OS}-${ARCH}.tar.gz"
+
+          # Package the binary and LICENSE/README if present
+          tmpdir="$(mktemp -d)"
+          install -Dm755 "$SRC" "$tmpdir/$BIN"
+          [ -f LICENSE ] && cp LICENSE "$tmpdir/"
+          [ -f README.md ] && cp README.md "$tmpdir/"
+          tar -C "$tmpdir" -czf "$ASSET_NAME" .
+
+          echo "asset_name=${ASSET_NAME}" >> "$GITHUB_OUTPUT"
+          echo "asset_path=${ASSET_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure tag exists (create or move tag to current HEAD)
         id: ensure_tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -41,73 +197,20 @@ jobs:
           set -euo pipefail
           tag="${{ steps.cargo_meta.outputs.tag }}"
 
-          # Configure Git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Check if tag exists remotely
+          # If tag exists on origin, repoint it to current HEAD (force move)
           if git ls-remote --tags origin | grep -q "refs/tags/${tag}$"; then
             echo "Tag ${tag} exists on origin. Re-pointing it to HEAD of main."
-            # Delete remote and local tag, then recreate
             git tag -d "${tag}" || true
             git push origin ":refs/tags/${tag}" || true
           else
             echo "Tag ${tag} does not exist on origin. Will create."
           fi
 
-          # Create tag at current commit and push
           git tag -a "${tag}" -m "Release ${tag}"
           git push origin "${tag}"
-
-      - name: Get previous release tag
-        id: get_previous_tag
-        shell: bash
-        run: |
-          # Get all tags, sort by version, and find the one before the current
-          current_tag="${{ steps.cargo_meta.outputs.tag }}"
-          # Fetch all tags to ensure we have them locally
-          git fetch --tags
-          previous_tag=$(git tag --sort=-v:refname | grep -B1 "^${current_tag}$" | head -n 1)
-          if [ -z "$previous_tag" ]; then
-            echo "No previous tag found, defaulting to initial commit for log."
-            echo "previous_tag=$(git rev-list --max-parents=0 HEAD)" >> "$GITHUB_OUTPUT"
-          else
-            echo "Previous tag: $previous_tag"
-            echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Generate commit list for release body
-        id: generate_commit_list
-        shell: bash
-        run: |
-          commit_list=$(git log --pretty=format:"* %h %s (%an)" ${{ steps.get_previous_tag.outputs.previous_tag }}..${{ steps.cargo_meta.outputs.tag }})
-          echo "commit_list<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$commit_list" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-      - name: Build release binary
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Build a stripped release binary
-          RUSTFLAGS="-C strip=symbols" cargo build --release
-          # Determine the binary path (assumes single binary crate)
-          BIN="${{ steps.cargo_meta.outputs.name }}"
-          SRC="target/release/${BIN}"
-          if [ ! -f "$SRC" ]; then
-            echo "Expected binary $SRC not found. If workspace/multiple bins, adjust selection."
-            exit 1
-          fi
-
-          # Prepare asset name with platform info
-          OS="linux"
-          ARCH="$(uname -m)"
-          VERSION="${{ steps.cargo_meta.outputs.version }}"
-          ASSET_NAME="${BIN}-v${VERSION}-${OS}-${ARCH}"
-
-          echo "asset_name=${ASSET_NAME}" >> "$GITHUB_OUTPUT"
-          echo "asset_path=${ASSET_NAME}" >> "$GITHUB_OUTPUT"
-        id: build
 
       - name: Create or get GitHub Release for tag
         id: upsert_release
@@ -120,6 +223,12 @@ jobs:
           tag="${{ steps.cargo_meta.outputs.tag }}"
           api="https://api.github.com/repos/${owner_repo}"
 
+          body=$(
+            jq -n --arg tag "$tag" --arg changes "${{ steps.generate_commit_list.outputs.commit_list }}" '
+              "Release \($tag)\n\nChanges:\n\($changes)"
+            '
+          )
+
           # Try to get release by tag
           get_resp=$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
             "${api}/releases/tags/${tag}" || true)
@@ -128,13 +237,20 @@ jobs:
             release_id=$(echo "$get_resp" | jq -r '.id')
             upload_url=$(echo "$get_resp" | jq -r '.upload_url' | sed 's/{?name,label}//')
             echo "Found existing release id=${release_id} for ${tag}"
+            # Optionally update the body if you want to refresh notes
+            patch_payload=$(jq -n --arg body "$body" '{body:$body}')
+            curl -sS -X PATCH \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$patch_payload" \
+              "${api}/releases/${release_id}" >/dev/null
           else
             echo "No release for ${tag}. Creating..."
             create_payload=$(jq -n \
               --arg tag_name "$tag" \
-              --arg target "main" \
+              --arg target "${{ github.ref_name }}" \
               --arg name "$tag" \
-              --arg body "Release $tag\n\nChanges:\n${{ steps.generate_commit_list.outputs.commit_list }}" \
+              --arg body "$body" \
               '{tag_name:$tag_name, target_commitish:$target, name:$name, body:$body, draft:false, prerelease:false}')
 
             create_resp=$(curl -sS -X POST \
@@ -170,12 +286,13 @@ jobs:
           assets=$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
             "${api}/releases/${release_id}/assets")
 
-          existing_id=$(echo "$assets" | jq -r ".[] | select(.name==\"${asset_name}\") | .id")
+          existing_id=$(echo "$assets" \
+            | jq -r ".[] | select(.name==\"${asset_name}\") | .id")
 
-          if [ -n "$existing_id" ] && [ "$existing_id" != "null" ]; then
+          if [ -n "${existing_id:-}" ] && [ "$existing_id" != "null" ]; then
             echo "Deleting existing asset ${asset_name} (id=${existing_id})"
             curl -sS -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
-              "${api}/releases/assets/${existing_id}"
+              "${api}/releases/assets/${existing_id}" >/dev/null
           else
             echo "No existing asset named ${asset_name}."
           fi
@@ -195,6 +312,3 @@ jobs:
             -H "Content-Type: application/gzip" \
             --data-binary @"${asset_path}" \
             "${upload_url}?name=$(basename "${asset_name}")"
-
-      - name: Run tests
-        run: cargo test --verbose
