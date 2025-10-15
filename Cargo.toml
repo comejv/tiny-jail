@@ -1,6 +1,6 @@
 [package]
 name = "tiny-jail"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 authors = ["Côme VINCENT <come.vincent@polytechnique.edu>"]
 license = "GPL-3.0"
@@ -8,6 +8,10 @@ description = "Seccomp filter generation using functional syscall groups and fuz
 repository = "https://github.com/comejv/tiny-jail"
 keywords = ["seccomp", "security", "syscall", "sandbox", "fuzzing"]
 categories = ["os::linux-apis"]
+
+[features]
+default = ["libseccomp-2-6"]
+libseccomp-2-6 = []
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
