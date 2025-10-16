@@ -101,15 +101,16 @@ jobs:
           set -euo pipefail
           base="${{ steps.changelog_base.outputs.base_ref }}"
           head="${{ steps.cargo_meta.outputs.tag }}"
-          # If base is a commit SHA, use that..HEAD; if it's a tag, also fine.
-          # Use --no-merges if you want to exclude merge commits (optional).
+          # Use --no-merges to exclude merge commits (optional).
           commit_list=$(git log --no-merges --pretty=format:"* %h %s (%an)" "${base}..HEAD")
           if [ -z "$commit_list" ]; then
             commit_list="(no changes)"
           fi
-          echo "commit_list<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$commit_list" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "commit_list<<EOF"
+            echo "$commit_list"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Run tests
         run: |
@@ -179,11 +180,10 @@ jobs:
           tag="${{ steps.cargo_meta.outputs.tag }}"
           api="https://api.github.com/repos/${owner_repo}"
 
-          body=$(
-            jq -n --arg tag "$tag" --arg changes "${{ steps.generate_commit_list.outputs.commit_list }}" '
-              "Release \($tag)\n\nChanges:\n\($changes)"
-            '
-          )
+          # Build plain body text with real newlines
+          body_text=$(printf 'Release %s\n\nChanges:\n%s\n' \
+            "$tag" \
+            "${{ steps.generate_commit_list.outputs.commit_list }}")
 
           # Try to get release by tag
           get_resp=$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
@@ -193,8 +193,9 @@ jobs:
             release_id=$(echo "$get_resp" | jq -r '.id')
             upload_url=$(echo "$get_resp" | jq -r '.upload_url' | sed 's/{?name,label}//')
             echo "Found existing release id=${release_id} for ${tag}"
-            # Optionally update the body if you want to refresh notes
-            patch_payload=$(jq -n --arg body "$body" '{body:$body}')
+
+            # Build JSON once; jq will escape newlines properly
+            patch_payload=$(jq -n --arg body "$body_text" '{body: $body}')
             curl -sS -X PATCH \
               -H "Authorization: token $GITHUB_TOKEN" \
               -H "Content-Type: application/json" \
@@ -202,17 +203,24 @@ jobs:
               "${api}/releases/${release_id}" >/dev/null
           else
             echo "No release for ${tag}. Creating..."
-            create_payload=$(jq -n \
+            payload=$(jq -n \
               --arg tag_name "$tag" \
               --arg target "${{ github.ref_name }}" \
               --arg name "$tag" \
-              --arg body "$body" \
-              '{tag_name:$tag_name, target_commitish:$target, name:$name, body:$body, draft:false, prerelease:false}')
+              --arg body "$body_text" \
+              '{
+                tag_name: $tag_name,
+                target_commitish: $target,
+                name: $name,
+                body: $body,
+                draft: false,
+                prerelease: false
+              }')
 
             create_resp=$(curl -sS -X POST \
               -H "Authorization: token $GITHUB_TOKEN" \
               -H "Content-Type: application/json" \
-              -d "$create_payload" \
+              -d "$payload" \
               "${api}/releases")
 
             release_id=$(echo "$create_resp" | jq -r '.id')
@@ -225,8 +233,10 @@ jobs:
             echo "Created release id=${release_id} for ${tag}"
           fi
 
-          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
-          echo "upload_url=$upload_url" >> "$GITHUB_OUTPUT"
+          {
+            echo "release_id=$release_id"
+            echo "upload_url=$upload_url"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Remove existing asset with same name (if any)
         env:
