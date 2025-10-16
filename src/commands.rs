@@ -64,7 +64,7 @@ pub fn filtered_exec(
         }
         #[cfg(not(libseccomp_2_6))]
         {
-            warn!("libseccomp version is < 2.6.0, falling back to BPF export to file");
+            warn!("compiled with libseccomp version < 2.6.0, intermediate BPF exports to file");
             let (mut reader, writer) = io::pipe().map_err(CommandError::Io)?;
             ctx.export_bpf(&writer).map_err(CommandError::LibSeccomp)?;
             drop(writer);
