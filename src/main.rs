@@ -68,13 +68,10 @@ struct FuzzArgs {
 
     /// The executable command to run and its arguments.
     ///
-    /// All arguments after this are treated as arguments for the executable.
-    #[arg(
-        required = true,
-        name = "EXECUTABLE_AND_ARGS",
-        trailing_var_arg = true,
-        allow_hyphen_values = true
-    )]
+    /// To pass arguments to the executable that start with a hyphen, you must use `--`
+    /// to separate the arguments for tiny-jail from the arguments for the executable.
+    /// For example: `tiny-jail fuzz -i 10 -- my-program --with-arg`
+    #[arg(required = true, name = "EXECUTABLE_AND_ARGS", trailing_var_arg = true)]
     exec: Vec<String>,
 }
 
@@ -113,18 +110,16 @@ struct ExecArgs {
     log: Vec<String>,
 
     /// Change all SCMP_ACT_ALLOW rules to SCMP_ACT_LOG and show the logs in the output.
-    #[arg(short = 'v', long = "show-logs")]
+    /// Requires admin privileges.
+    #[arg(short = 'w', long = "watch-logs")]
     show_log: bool,
 
     /// The executable command to run and its arguments.
     ///
-    /// All arguments after this are treated as arguments for the executable.
-    #[arg(
-        required = true,
-        name = "EXECUTABLE_AND_ARGS",
-        trailing_var_arg = true,
-        allow_hyphen_values = true
-    )]
+    /// To pass arguments to the executable that start with a hyphen, you must use `--`
+    /// to separate the arguments for tiny-jail from the arguments for the executable.
+    /// For example: `tiny-jail exec --profile p.json -- ls -l`
+    #[arg(required = true, name = "EXECUTABLE_AND_ARGS", trailing_var_arg = true)]
     exec: Vec<String>,
 }
 
