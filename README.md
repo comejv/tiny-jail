@@ -4,6 +4,15 @@ This project focuses on developing a command-line utility in Rust designed to en
 
 The tool is conceptually inspired by the `seccomp` capabilities of projects like `Firejail` and `Bubblewrap`.
 
+## Progress Tracking
+
+* [x] Implement a basic policy parser and generator.
+* [x] Give means to apply the policy to a target program.
+* [x] Let user specify additional actions on command-line.
+* [x] Handle log action and show logs in the output.
+* [-] Handle abstract syscall groups in the policy.
+* [ ] Fuzzer-Based Dynamic Generation.
+
 ## Implementation and Policy Structure
 
 The implementation will leverage Rust's memory safety and concurrency features to safely and efficiently interact with the operating system. Key components include:
@@ -20,15 +29,6 @@ Policies will allow users to specify a required `defaultAction` and specific act
 *   **`SCMP_ACT_ERRNO`** (return a specific error code, e.g., `EPERM`).
 *   **`SCMP_ACT_NOTIFY`** (send the process state to a userspace agent for dynamic handling).
 
-## Core Innovation: Hybrid Policy Generation
-
-To overcome the inherent security limitations of simple dynamic "learning modes" (which are prone to missing rare syscall paths, known as the false negative trap), this project implements a **Hybrid Coverage-Guided Policy Generation Architecture**.
-
-This multi-phase approach ensures adherence to the **Principle of Least Privilege (PoLP)**:
-
-1.  **Phase 1: Static Pre-Analysis and Baseline (Deny-by-Default)**: Static analysis techniques (similar to the Chestnut framework) are used to quickly establish a restrictive baseline, identifying an initial set of necessary syscalls based on code structure (e.g., blocking 86.5% of the syscall attack surface quickly). The initial BPF filter is loaded to enforce a **Deny-by-Default** posture (`SECCOMP_RET_KILL` for all unlisted calls).
-2.  **Phase 2 & 3: Coverage-Guided Refinement**: The application is executed under dynamic tracing and **structure-aware fuzzing** (via tools like AFL++). The loaded BPF filter acts as a detector: when the fuzzer discovers a new execution path that requires an unlisted syscall, the filter triggers a detectable crash or trace event (`SECCOMP_RET_KILL` or `SECCOMP_RET_TRACE`), signaling the need for policy update. This continuous feedback loop iteratively refines the policy, maximizing coverage and fidelity.
-
 ## Advanced Security Features
 
 ### 1. Syscall Argument Filtering
@@ -40,6 +40,7 @@ The project targets true Least Privilege compliance by moving beyond simple sysc
 
 *   **`seccomp` man page:** `man 2 seccomp` (or online: <https://man7.org/linux/man-pages/man2/seccomp.2.html>)
 *   **`libseccomp` rust crate:** <https://docs.rs/libseccomp/latest/libseccomp/>
+*   **`SeccompFuzzer` paper and gitlab repo:** <https://gitlab.com/iot-aalen/fuzz-seccomp-filter>
 *   **`nix` Rust crate:** <https://docs.rs/nix/latest/nix/>
 *   **`Firejail` project:** <https://firejail.wordpress.com/> (for conceptual inspiration)
 *   **`Bubblewrap` project:** <https://github.com/containers/bubblewrap> (for conceptual inspiration)
