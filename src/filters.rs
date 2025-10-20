@@ -8,7 +8,7 @@ use std::fs;
 use std::str::FromStr;
 use thiserror::Error;
 
-use crate::actions::Action;
+use crate::actions::{Action, ActionError};
 
 #[derive(Error, Debug)]
 pub enum ProfileError {
@@ -26,6 +26,10 @@ pub enum ProfileError {
     LibSeccomp(#[from] SeccompError),
     #[error("OCI profile has no syscalls")]
     NoSyscallsInProfile,
+    #[error("Invalid action parameters: {0}")]
+    Action(#[from] ActionError),
+    #[error("Invalid OCI profile argument: {0}")]
+    InvalidArgument(String),
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -96,14 +100,15 @@ pub fn load_profile(
 
         let default_action = default_action_override
             .unwrap_or(oci_seccomp.default_action)
-            .to_scmp_action(default_errno_ret);
+            .to_scmp_action(default_errno_ret)?;
 
         ctx = ScmpFilterContext::new(default_action)?;
 
         // Add architectures from the profile
         if !oci_seccomp.architectures.is_empty() {
             for arch_str in &oci_seccomp.architectures {
-                let arch = ScmpArch::from_str(arch_str)?;
+                let arch = ScmpArch::from_str(arch_str)
+                    .map_err(|e| ProfileError::ArchConversion(e.to_string()))?;
                 if !ctx.is_arch_present(arch)? {
                     ctx.add_arch(arch)?;
                 }
@@ -119,7 +124,7 @@ pub fn load_profile(
                 } else {
                     syscall_entry.action
                 })
-                .to_scmp_action(syscall_entry.errno_ret);
+                .to_scmp_action(syscall_entry.errno_ret)?;
 
                 for syscall_name in &syscall_entry.names {
                     let syscall = ScmpSyscall::from_name(syscall_name)
@@ -140,7 +145,12 @@ pub fn load_profile(
                                 // For others, value is the datum
                                 let (op, datum) = if arg.op == "SCMP_CMP_MASKED_EQ" {
                                     let mask = arg.value;
-                                    let datum = arg.value_two.unwrap_or(0);
+                                    let datum = arg.value_two.ok_or_else(|| {
+                                        ProfileError::InvalidArgument(
+                                            "valueTwo must be present for SCMP_CMP_MASKED_EQ"
+                                                .to_string(),
+                                        )
+                                    })?;
                                     (ScmpCompareOp::MaskedEqual(mask), datum)
                                 } else {
                                     (parse_scmp_compare_op(&arg.op, arg.value)?, arg.value)
@@ -159,7 +169,7 @@ pub fn load_profile(
         }
     } else {
         info!("No profile provided, using default action: Allow + parameter override");
-        ctx = ScmpFilterContext::new(Action::Allow.to_scmp_action(None))?;
+        ctx = ScmpFilterContext::new(Action::Allow.to_scmp_action(None)?)?;
     }
 
     // Apply kill_syscalls overrides
