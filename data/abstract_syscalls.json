@@ -122,7 +122,7 @@
   },
   "stat_2": {
     "parameters": "path, buf",
-    "description": "get\u00a0 file status",
+    "description": "get a file status",
     "implementations": [
       {
         "call": "stat(path, buf)",
@@ -181,7 +181,7 @@
   },
   "lseek_2": {
     "parameters": "fd, offset, whence",
-    "description": "reposition read/write file\noffset",
+    "description": "reposition read/write file offset",
     "implementations": [
       {
         "call": "_llseek(fd, offset_high, offset_low, * , whence)",
@@ -225,7 +225,7 @@
   },
   "recv_2": {
     "parameters": "s, buf, len, flag",
-    "description": "receive a\nmessage from a socket",
+    "description": "receive a message from a socket",
     "implementations": [
       {
         "call": "recv(s, buf, len, flag)",
@@ -248,7 +248,7 @@
   },
   "send_2": {
     "parameters": "s, msg, len, flag",
-    "description": "send a\nmessage to a socket",
+    "description": "send a message to a socket",
     "implementations": [
       {
         "call": "send(s, msg, len, flag)",
