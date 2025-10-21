@@ -36,8 +36,6 @@ pub struct DecodedCode {
     pub action: Action,
 }
 
-// Helper method to set decoded field
-impl SeccompEvent {}
 #[derive(Debug)]
 pub enum MonitorError {
     CommandFailed(String),
@@ -305,13 +303,17 @@ pub fn monitor_seccomp_logs(
                             continue;
                         }
                     }
+                    Err(MonitorError::ParseError(e)) if e.contains("Not a seccomp audit entry") => {
+                        debug!("Skipping line: {}", l);
+                        continue;
+                    }
                     Err(e) => {
                         error!("Could not parse the event: {:?}", e);
                         continue;
                     }
                 },
                 Err(err) => {
-                    warn!("error reading from dmesg: {}", err);
+                    error!("error reading from dmesg: {}", err);
                     continue;
                 }
             }

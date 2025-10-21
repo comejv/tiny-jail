@@ -55,6 +55,65 @@ fn handle_exit_status(status: std::process::ExitStatus) -> Result<(), CommandErr
     }
 }
 
+fn execute_and_monitor(
+    mut command: Command,
+) -> Result<(), CommandError> {
+    // Monitoring logic
+    let (tx, rx): (Sender<SeccompEvent>, Receiver<SeccompEvent>) = mpsc::channel();
+    let stats = Arc::new(Mutex::new(SeccompStats::default()));
+    let (tx_ready, rx_ready) = mpsc::channel::<()>();
+
+    warn!("Starting seccomp monitor (requires sudo)...\n");
+
+    let monitor_handle = monitor_seccomp_logs(tx, tx_ready)
+        .map_err(|e| CommandError::Monitor(format!("{:?}", e)))?;
+
+    match rx_ready.recv_timeout(Duration::from_secs(30)) {
+        Ok(()) => debug!("Monitor reported ready; releasing child."),
+        Err(e) => {
+            monitor_handle.stop();
+            return Err(CommandError::Monitor(format!(
+                "Timeout waiting for monitor readiness: {}",
+                e
+            )));
+        }
+    }
+
+    thread::sleep(Duration::from_millis(500));
+    // Spawn a thread to handle events as they come in.
+    let stats_clone = Arc::clone(&stats);
+    let event_handle = thread::spawn(move || {
+        for event in rx {
+            event.print_event();
+            if let Ok(mut guard) = stats_clone.lock() {
+                guard.add_event(&event);
+            }
+        }
+    });
+
+    let mut child = command.spawn()?;
+    let status_res = child.wait();
+
+    // Give a moment for any final events to come through from the kernel logs.
+    thread::sleep(Duration::from_millis(500));
+
+    // Stop the monitor, which will close the channel and cause the event thread to exit.
+    monitor_handle.stop();
+
+    // Wait for the event processing thread to finish.
+    // We don't care if it panicked, we'll just not get a full summary.
+    let _ = event_handle.join();
+
+    // Print the final summary.
+    if let Ok(guard) = stats.lock() {
+        guard.print_summary();
+    }
+
+    // Now handle the child's exit status.
+    let status = status_res?;
+    handle_exit_status(status)
+}
+
 pub fn filtered_exec(
     ctx: ScmpFilterContext,
     path: Vec<String>,
@@ -118,66 +177,13 @@ pub fn filtered_exec(
         });
     }
 
-    if !show_log {
+    if show_log {
+        execute_and_monitor(command)
+    } else {
         let status = command.status()?;
         debug!("Child process exited with status: {:?}", status);
-        return handle_exit_status(status);
+        handle_exit_status(status)
     }
-
-    // Monitoring logic
-    let (tx, rx): (Sender<SeccompEvent>, Receiver<SeccompEvent>) = mpsc::channel();
-    let stats = Arc::new(Mutex::new(SeccompStats::default()));
-    let (tx_ready, rx_ready) = mpsc::channel::<()>();
-
-    warn!("Starting seccomp monitor (requires sudo)...\n");
-
-    let monitor_handle = monitor_seccomp_logs(tx, tx_ready)
-        .map_err(|e| CommandError::Monitor(format!("{:?}", e)))?;
-
-    match rx_ready.recv_timeout(Duration::from_secs(30)) {
-        Ok(()) => debug!("Monitor reported ready; releasing child."),
-        Err(e) => {
-            monitor_handle.stop();
-            return Err(CommandError::Monitor(format!(
-                "Timeout waiting for monitor readiness: {}",
-                e
-            )));
-        }
-    }
-
-    thread::sleep(Duration::from_millis(500));
-    // Spawn a thread to handle events as they come in.
-    let stats_clone = Arc::clone(&stats);
-    let event_handle = thread::spawn(move || {
-        for event in rx {
-            event.print_event();
-            if let Ok(mut guard) = stats_clone.lock() {
-                guard.add_event(&event);
-            }
-        }
-    });
-
-    let mut child = command.spawn()?;
-    let status_res = child.wait();
-
-    // Give a moment for any final events to come through from the kernel logs.
-    thread::sleep(Duration::from_millis(500));
-
-    // Stop the monitor, which will close the channel and cause the event thread to exit.
-    monitor_handle.stop();
-
-    // Wait for the event processing thread to finish.
-    // We don't care if it panicked, we'll just not get a full summary.
-    let _ = event_handle.join();
-
-    // Print the final summary.
-    if let Ok(guard) = stats.lock() {
-        guard.print_summary();
-    }
-
-    // Now handle the child's exit status.
-    let status = status_res?;
-    handle_exit_status(status)
 }
 
 pub fn fuzz_exec(_path: Vec<String>, _pass_env: bool) -> Result<(), CommandError> {
