@@ -94,24 +94,6 @@ jobs:
             echo "base_ref=$root" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate commit list for release body
-        id: generate_commit_list
-        shell: bash
-        run: |
-          set -euo pipefail
-          base="${{ steps.changelog_base.outputs.base_ref }}"
-          head="${{ steps.cargo_meta.outputs.tag }}"
-          # Use --no-merges to exclude merge commits (optional).
-          commit_list=$(git log --no-merges --pretty=format:"* %h %s (%an)" "${base}..HEAD")
-          if [ -z "$commit_list" ]; then
-            commit_list="(no changes)"
-          fi
-          {
-            echo "commit_list<<EOF"
-            echo "$commit_list"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Run tests
         run: |
           set -euo pipefail
@@ -183,7 +165,7 @@ jobs:
           # Build plain body text with real newlines
           body_text=$(printf 'Release %s\n\nChanges:\n%s\n' \
             "$tag" \
-            "${{ steps.generate_commit_list.outputs.commit_list }}")
+            "**Full Changelog**: https://github.com/comejv/tiny-jail/compare/v${{ steps.cargo_meta.outputs.previous_version }}...v${{ steps.cargo_meta.outputs.version }}")
 
           # Try to get release by tag
           get_resp=$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
