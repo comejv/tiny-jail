@@ -7,6 +7,8 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use crate::actions::Action;
+
 #[derive(Debug, Clone, Default)]
 pub struct SeccompEvent {
     pub timestamp: String,
@@ -22,17 +24,41 @@ pub struct SeccompEvent {
     pub syscall: u32,
     pub compat: u32,
     pub ip: String,
-    pub code: String,
+    pub code: u32,
+    pub decoded: DecodedCode,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DecodedCode {
+    pub raw: u32,
+    pub class: u32,
+    pub data: u16,
+    pub action: Action,
+}
+
+// Helper method to set decoded field
+impl SeccompEvent {}
 #[derive(Debug)]
 pub enum MonitorError {
     CommandFailed(String),
     ParseError(String),
 }
 
+const SECCOMP_RET_ACTION_FULL: u32 = 0xffff0000;
+const SECCOMP_RET_DATA: u32 = 0x0000ffff;
+pub fn decode_code(raw: u32) -> DecodedCode {
+    let class = raw & SECCOMP_RET_ACTION_FULL;
+    let data = (raw & SECCOMP_RET_DATA) as u16;
+    let action = Action::from_class(class).unwrap_or(Action::Unknown);
+    DecodedCode {
+        raw,
+        class,
+        data,
+        action,
+    }
+}
+
 impl SeccompEvent {
-    /// Parse a seccomp audit log line
     fn parse(line: &str) -> Result<Self, MonitorError> {
         // Check if it's a seccomp audit entry (type=1326)
         if !line.contains("type=1326") {
@@ -41,85 +67,146 @@ impl SeccompEvent {
             ));
         }
 
-        let mut event = SeccompEvent::default();
-        // Parse audit timestamp
-        // Timestamp is in the format "[mar. 14 oct. 11:11:44 2025]"
-        let ts_start = line
-            .find('[')
-            .ok_or_else(|| MonitorError::ParseError("Timestamp start not found".to_string()))?
-            + 1;
-        let ts_end = line
-            .find(']')
-            .ok_or_else(|| MonitorError::ParseError("Timestamp end not found".to_string()))?;
-        if ts_start > ts_end {
-            return Err(MonitorError::ParseError(
-                "Invalid timestamp format".to_string(),
-            ));
-        }
-        event.timestamp = line[ts_start..ts_end].to_string();
+        // Parse audit timestamp from audit(timestamp:id) format
+        let timestamp = line
+            .find("audit(")
+            .and_then(|start| {
+                let after = &line[start + 6..];
+                after.find(')').map(|end| &after[..end])
+            })
+            .ok_or_else(|| MonitorError::ParseError("Timestamp not found".to_string()))?
+            .to_string();
 
-        let details = &line[ts_end..];
-
-        // Helper function to extract field values
-        let extract_field = |field: &str| -> Option<String> {
-            details.find(field).map(|start| {
-                let after = &details[start + field.len()..];
+        // Helper to extract field values (single pass per field)
+        let extract_field = |field: &str| -> Option<&str> {
+            line.find(field).map(|start| {
+                let after = &line[start + field.len()..];
                 let end = after.find(' ').unwrap_or(after.len());
-                after[..end].to_string()
+                &after[..end]
             })
         };
 
         // Helper for quoted fields
         let extract_quoted = |field: &str| -> Option<String> {
-            details.find(field).and_then(|start| {
-                let after = &details[start + field.len()..];
-                if let Some(s) = after.strip_prefix('"') {
-                    s.find('"').map(|end| s[..end].to_string())
-                } else {
-                    let end = after.find(' ').unwrap_or(after.len());
-                    Some(after[..end].to_string())
-                }
+            line.find(field).and_then(|start| {
+                let after = &line[start + field.len()..];
+                after
+                    .strip_prefix('"')
+                    .and_then(|s| s.find('"').map(|end| s[..end].to_string()))
             })
         };
 
-        // Helper to convert Option to Result and parse
-        let parse_field = |field: &str| -> Result<u32, MonitorError> {
-            extract_field(field)
-                .ok_or_else(|| MonitorError::ParseError(format!("Missing {}", field)))?
-                .parse()
-                .map_err(|_| MonitorError::ParseError(format!("Invalid {}", field)))
+        // Parse numeric field (handles both hex and decimal)
+        let parse_u32 = |field: &str| -> Result<u32, MonitorError> {
+            let value = extract_field(field)
+                .ok_or_else(|| MonitorError::ParseError(format!("Missing {}", field)))?;
+
+            if let Some(hex) = value.strip_prefix("0x") {
+                u32::from_str_radix(hex, 16)
+            } else {
+                value.parse()
+            }
+            .map_err(|_| MonitorError::ParseError(format!("Invalid {}: {}", field, value)))
         };
 
-        // Extract all fields
-        event.auid = parse_field("auid=")?;
-        event.uid = parse_field("uid=")?;
-        event.gid = parse_field("gid=")?;
-        event.ses = parse_field("ses=")?;
-        event.pid = parse_field("pid=")?;
-        event.comm = extract_quoted("comm=")
-            .ok_or_else(|| MonitorError::ParseError("Missing comm".to_string()))?;
-        event.exe = extract_quoted("exe=")
-            .ok_or_else(|| MonitorError::ParseError("Missing exe".to_string()))?;
-        event.sig = parse_field("sig=")?;
-        event.arch = extract_field("arch=")
-            .ok_or_else(|| MonitorError::ParseError("Missing arch".to_string()))?;
-        event.syscall = parse_field("syscall=")?;
-        event.compat = parse_field("compat=")?;
-        event.ip = extract_field("ip=")
-            .ok_or_else(|| MonitorError::ParseError("Missing ip".to_string()))?;
-        event.code = extract_field("code=")
-            .ok_or_else(|| MonitorError::ParseError("Missing code".to_string()))?;
-        Ok(event)
+        // Extract string field
+        let get_string = |field: &str| -> Result<String, MonitorError> {
+            extract_field(field)
+                .map(|s| s.to_string())
+                .ok_or_else(|| MonitorError::ParseError(format!("Missing {}", field)))
+        };
+
+        Ok(SeccompEvent {
+            timestamp,
+            auid: parse_u32("auid=")?,
+            uid: parse_u32("uid=")?,
+            gid: parse_u32("gid=")?,
+            ses: parse_u32("ses=")?,
+            pid: parse_u32("pid=")?,
+            comm: extract_quoted("comm=")
+                .ok_or_else(|| MonitorError::ParseError("Missing comm".to_string()))?,
+            exe: extract_quoted("exe=")
+                .ok_or_else(|| MonitorError::ParseError("Missing exe".to_string()))?,
+            sig: parse_u32("sig=")?,
+            arch: get_string("arch=")?,
+            syscall: parse_u32("syscall=")?,
+            compat: parse_u32("compat=")?,
+            ip: get_string("ip=")?,
+            code: parse_u32("code=")?,
+            decoded: DecodedCode::default(),
+        }
+        .with_decoded())
+    }
+
+    fn with_decoded(mut self) -> Self {
+        self.decoded = decode_code(self.code);
+        self
+    }
+
+    fn is_fatal(&self) -> bool {
+        matches!(
+            self.decoded.action,
+            Action::KillProcess | Action::KillThread
+        ) || (matches!(self.decoded.action, Action::Trap) && self.sig == 31)
+    }
+
+    fn decoded_summary(&self) -> String {
+        let d = &self.decoded;
+        match d.action {
+            Action::Allow => "ALLOW".to_string(),
+            Action::Log => "LOG".to_string(),
+            Action::Errno => format!("ERRNO={}", d.data),
+            Action::Trap => {
+                if self.sig == 31 {
+                    "TRAP(SIGSYS)".to_string()
+                } else {
+                    "TRAP".to_string()
+                }
+            }
+            Action::Trace => format!("TRACE(cookie=0x{:04x})", d.data),
+            Action::KillThread => "KILL_THREAD".to_string(),
+            Action::KillProcess => "KILL_PROCESS".to_string(),
+            Action::Unknown => format!("UNKNOWN(0x{:08x})", d.raw),
+        }
     }
 
     pub fn print_event(&self) {
-        println!("┌─ Seccomp Event ─────────────────────────────────────┐");
+        let fatal = self.is_fatal();
+        let head = if fatal {
+            "┌─ Seccomp Event [FATAL] ──────────────────────────────┐"
+        } else {
+            "┌─ Seccomp Event ──────────────────────────────────────┐"
+        };
+        println!("{}", head);
+
         println!("│ Process: {} (PID: {})", self.comm, self.pid);
         println!("│ Executable: {}", self.exe);
         println!("│ Syscall: {} (arch: {})", self.syscall, self.arch);
-        println!("│ User: uid={}, gid={}", self.uid, self.gid);
-        println!("│ Code: {}", self.code);
+        println!(
+            "│ User: uid={}, gid={}, auid={}, ses={}",
+            self.uid, self.gid, self.auid, self.ses
+        );
+
+        println!("│ Action: {}", self.decoded_summary());
+
+        if self.sig != 0 {
+            let sig = if self.sig == 31 {
+                "SIGSYS(31)"
+            } else {
+                "other"
+            };
+            println!("│ Signal: {}", sig);
+        } else {
+            println!("│ Signal: none");
+        }
+
+        println!("│ IP: {}", self.ip);
+        println!(
+            "│ Code: raw=0x{:08x} class=0x{:08x} data=0x{:04x}",
+            self.decoded.raw, self.decoded.class, self.decoded.data
+        );
         println!("│ Timestamp: {}", self.timestamp);
+
         println!("└─────────────────────────────────────────────────────┘\n");
     }
 }
@@ -177,10 +264,10 @@ pub fn monitor_seccomp_logs(
 
         // 2) Now spawn the actual dmesg monitor under sudo
         let mut child = match Command::new("sudo")
-            .args(["dmesg", "-w", "-T"])
-            .stdin(Stdio::inherit()) // dmesg won't read stdin, but we inherit so no surprise
+            .args(["dmesg", "-W", "-T"])
+            .stdin(Stdio::inherit())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit()) // if it somehow needs a prompt again, user will see it
+            .stderr(Stdio::inherit())
             .spawn()
         {
             Ok(c) => c,
@@ -204,24 +291,28 @@ pub fn monitor_seccomp_logs(
         };
         *child_process_clone.lock().unwrap() = Some(child);
 
-        // 3) Only now do we signal the parent that the monitor is truly
-        //    up (and credentials are in place), so it can release the exec.
+        // 3) Signal the parent that we are ready
         let _ = tx_ready.send(());
 
         // 4) Stream lines from dmesg → parse → tx_events
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
             match line {
-                Ok(l) => {
-                    if let Ok(ev) = SeccompEvent::parse(&l) {
+                Ok(l) => match SeccompEvent::parse(&l) {
+                    Ok(ev) => {
                         if tx_events.send(ev).is_err() {
-                            break;
+                            error!("Could not send the event");
+                            continue;
                         }
                     }
-                }
+                    Err(e) => {
+                        error!("Could not parse the event: {:?}", e);
+                        continue;
+                    }
+                },
                 Err(err) => {
                     warn!("error reading from dmesg: {}", err);
-                    break;
+                    continue;
                 }
             }
         }
@@ -273,7 +364,19 @@ impl SeccompStats {
         println!("\nTop Syscalls:");
         let mut sorted_syscalls: Vec<_> = self.by_syscall.iter().collect();
         sorted_syscalls.sort_by(|a, b| b.1.cmp(a.1));
-        for (syscall, count) in sorted_syscalls.iter().take(5) {
+        let syscall_names = sorted_syscalls
+            .iter()
+            .map(|(syscall, count)| {
+                (
+                    libseccomp::ScmpSyscall::from_raw_syscall(**syscall as i32)
+                        .get_name()
+                        .unwrap_or("UNKNOWN".to_string()),
+                    count,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        for (syscall, count) in syscall_names.iter().take(5) {
             println!("  syscall {} - {} events", syscall, count);
         }
 
@@ -283,5 +386,61 @@ impl SeccompStats {
         for (exe, count) in sorted_exes.iter().take(5) {
             println!("  {} - {} events", exe, count);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_seccomp_event() {
+        let line = r#"[mer. 22 oct. 16:59:18 2025] audit: type=1326 audit(1761049793.948:471): auid=1000 uid=1000 gid=1000 ses=2 pid=38620 comm="ls" exe="/usr/bin/ls" sig=31 arch=c000003e syscall=1 compat=0 ip=0x7ffff7ca6527 code=0x0"#
+            .to_string();
+
+        let event = SeccompEvent::parse(&line).unwrap();
+        assert_eq!(event.auid, 1000);
+        assert_eq!(event.uid, 1000);
+        assert_eq!(event.gid, 1000);
+        assert_eq!(event.ses, 2);
+        assert_eq!(event.pid, 38620);
+        assert_eq!(event.comm, "ls");
+        assert_eq!(event.exe, "/usr/bin/ls");
+        assert_eq!(event.sig, 31);
+        assert_eq!(event.syscall, 1);
+        assert_eq!(event.compat, 0);
+        assert_eq!(event.ip, "0x7ffff7ca6527");
+        assert_eq!(event.code, 0);
+        assert_eq!(event.decoded.raw, 0);
+        assert_eq!(event.decoded.class, 0);
+        assert_eq!(event.decoded.data, 0);
+        assert_eq!(event.decoded.action, Action::KillThread);
+    }
+
+    #[test]
+    fn test_decode_code() {
+        let code = decode_code(0x7fff0000);
+        assert_eq!(code.raw, 0x7fff0000);
+        assert_eq!(code.class, 0x7fff0000);
+        assert_eq!(code.data, 0x0000);
+        assert_eq!(code.action, Action::Allow);
+
+        let code = decode_code(0x7fff0000 | 0x0000abcd);
+        assert_eq!(code.raw, 0x7fffabcd);
+        assert_eq!(code.class, 0x7fff0000);
+        assert_eq!(code.data, 0xabcd);
+        assert_eq!(code.action, Action::Allow);
+
+        let code = decode_code(0x7ff00000 | 0x0000ffff);
+        assert_eq!(code.raw, 0x7ff0ffff);
+        assert_eq!(code.class, 0x7ff00000);
+        assert_eq!(code.data, 0xffff);
+        assert_eq!(code.action, Action::Trace);
+
+        let code = decode_code(0x7ffc0000 | 0x0000ffff | 0x00000001);
+        assert_eq!(code.raw, 0x7ffcffff);
+        assert_eq!(code.class, 0x7ffc0000);
+        assert_eq!(code.data, 0xffff);
+        assert_eq!(code.action, Action::Log);
     }
 }

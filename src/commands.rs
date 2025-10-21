@@ -6,7 +6,11 @@ use std::io;
 use std::io::Read;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::Command;
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::{
+    mpsc::{self, Receiver, Sender},
+    Arc, Mutex,
+};
+use std::thread;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -92,7 +96,13 @@ pub fn filtered_exec(
                 filter: filter_ptr as *mut _,
             };
 
-            nix::sys::prctl::set_no_new_privs().map_err(io::Error::other)?;
+            match nix::sys::prctl::set_no_new_privs() {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("Failed to set no_new_privs: {}", e);
+                    warn!("Continuing anyway...");
+                }
+            }
 
             let ret = libc::syscall(
                 libc::SYS_seccomp as libc::c_long,
@@ -116,7 +126,7 @@ pub fn filtered_exec(
 
     // Monitoring logic
     let (tx, rx): (Sender<SeccompEvent>, Receiver<SeccompEvent>) = mpsc::channel();
-    let mut stats = SeccompStats::default();
+    let stats = Arc::new(Mutex::new(SeccompStats::default()));
     let (tx_ready, rx_ready) = mpsc::channel::<()>();
 
     warn!("Starting seccomp monitor (requires sudo)...\n");
@@ -135,42 +145,38 @@ pub fn filtered_exec(
         }
     }
 
-    let mut child = command.spawn()?;
-
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                debug!("Child process exited with status: {:?}", status);
-                while let Ok(event) = rx.try_recv() {
-                    event.print_event();
-                    stats.add_event(&event);
-                }
-                monitor_handle.stop();
-                stats.print_summary();
-                return handle_exit_status(status);
-            }
-            Ok(None) => match rx.recv_timeout(Duration::from_millis(100)) {
-                Ok(event) => {
-                    event.print_event();
-                    stats.add_event(&event);
-                }
-                Err(RecvTimeoutError::Timeout) => continue,
-                Err(RecvTimeoutError::Disconnected) => {
-                    error!("Monitor died unexpectedly");
-                    break;
-                }
-            },
-            Err(e) => {
-                monitor_handle.stop();
-                stats.print_summary();
-                return Err(CommandError::Io(e));
+    thread::sleep(Duration::from_millis(500));
+    // Spawn a thread to handle events as they come in.
+    let stats_clone = Arc::clone(&stats);
+    let event_handle = thread::spawn(move || {
+        for event in rx {
+            event.print_event();
+            if let Ok(mut guard) = stats_clone.lock() {
+                guard.add_event(&event);
             }
         }
+    });
+
+    let mut child = command.spawn()?;
+    let status_res = child.wait();
+
+    // Give a moment for any final events to come through from the kernel logs.
+    thread::sleep(Duration::from_millis(500));
+
+    // Stop the monitor, which will close the channel and cause the event thread to exit.
+    monitor_handle.stop();
+
+    // Wait for the event processing thread to finish.
+    // We don't care if it panicked, we'll just not get a full summary.
+    let _ = event_handle.join();
+
+    // Print the final summary.
+    if let Ok(guard) = stats.lock() {
+        guard.print_summary();
     }
 
-    monitor_handle.stop();
-    stats.print_summary();
-    let status = child.wait()?;
+    // Now handle the child's exit status.
+    let status = status_res?;
     handle_exit_status(status)
 }
 
