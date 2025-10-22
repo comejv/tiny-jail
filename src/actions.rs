@@ -1,6 +1,8 @@
 use clap::ValueEnum;
 use libseccomp::ScmpAction;
 use serde::Deserialize;
+use std::cmp::Ordering;
+use std::fmt::Display;
 use std::num::TryFromIntError;
 use thiserror::Error;
 
@@ -40,6 +42,19 @@ pub enum Action {
 }
 
 impl Action {
+    fn restrictiveness_level(&self) -> u8 {
+        match self {
+            Action::KillProcess => 7,
+            Action::KillThread => 6,
+            Action::Trap => 5,
+            Action::Errno => 4,
+            Action::Trace => 3,
+            Action::Log => 2,
+            Action::Allow => 1,
+            Action::Unknown => 0,
+        }
+    }
+
     pub fn to_scmp_action(&self, errno: Option<u32>) -> Result<ScmpAction, ActionError> {
         let eperm = nix::libc::EPERM as u32;
         match self {
@@ -50,8 +65,42 @@ impl Action {
             Action::Trace => Ok(ScmpAction::Trace(errno.unwrap_or(0).try_into()?)),
             Action::Allow => Ok(ScmpAction::Allow),
             Action::Log => Ok(ScmpAction::Log),
-            Action::Unknown => Err(ActionError::UnknownAction)?,
+            Action::Unknown => Err(ActionError::UnknownAction),
         }
+    }
+}
+
+impl From<ScmpAction> for Action {
+    fn from(action: ScmpAction) -> Self {
+        match action {
+            ScmpAction::KillProcess => Action::KillProcess,
+            ScmpAction::KillThread => Action::KillThread,
+            ScmpAction::Trap => Action::Trap,
+            ScmpAction::Errno(_) => Action::Errno,
+            ScmpAction::Trace(_) => Action::Trace,
+            ScmpAction::Allow => Action::Allow,
+            ScmpAction::Log => Action::Log,
+            _ => Action::Unknown,
+        }
+    }
+}
+
+impl PartialOrd for Action {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Action {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.restrictiveness_level()
+            .cmp(&other.restrictiveness_level())
+    }
+}
+
+impl Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
