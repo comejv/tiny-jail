@@ -6,7 +6,16 @@
     "syscalls": [
         {
             "names": [
-                "write"
+                "write",
+                "read"
+            ],
+            "action": "SCMP_ACT_LOG"
+        }
+    ],
+    "abstract_syscalls": [
+        {
+            "names": [
+                "WriteOpen"
             ],
             "action": "SCMP_ACT_KILL"
         }

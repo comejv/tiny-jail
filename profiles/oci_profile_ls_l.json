@@ -1,0 +1,31 @@
+{
+    "defaultAction": "SCMP_ACT_ERRNO",
+    "architectures": [
+        "SCMP_ARCH_X86_64"
+    ],
+    "syscalls": [
+        {
+            "names": [
+                "openat",
+                "newfstatat",
+                "read",
+                "mmap",
+                "close",
+                "fstat",
+                "statx",
+                "llistxattr",
+                "mprotect",
+                "getdents64",
+                "lseek",
+                "pread64",
+                "prctl",
+                "write",
+                "futex",
+                "execve",
+                "arch_prctl"
+            ],
+            "action": "SCMP_ACT_ALLOW"
+        }
+    ]
+}
+
