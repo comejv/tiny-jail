@@ -53,8 +53,7 @@ fn test_regression_architecture_handling() {
 }
 
 #[test]
-fn test_regression_kill_valid() {
-    // Run tiny-jail with invalid syscall name.
+fn test_regression_kill_invalid() {
     let output = Command::new("./target/debug/tiny-jail")
         .arg("exec")
         .arg("--kill")
@@ -65,24 +64,22 @@ fn test_regression_kill_valid() {
         .output()
         .expect("Failed to execute tiny-jail");
 
-    // Assert that tiny-jail exits with an error.
-    let status = output.status;
+    // Assert that tiny-jail exits successfully despite invalid syscall
     assert!(
-        status.success(),
-        "tiny-jail process should exit successfully"
+        output.status.success(),
+        "tiny-jail should exit successfully with warning"
     );
 
-    // Assert that the error message indicates an unknown argument.
+    // Assert that the warning is logged to stderr
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("Could not add kill rule for syscall"),
-        "stderr should contain the correct warn message"
+        stdout.contains("Could not add kill rule for unknown syscall: invalid"),
+        "stderr should contain the correct warning message"
     );
 }
 
 #[test]
-fn test_regression_log_valid() {
-    // Run tiny-jail with invalid syscall name.
+fn test_regression_log_invalid() {
     let output = Command::new("./target/debug/tiny-jail")
         .arg("exec")
         .arg("--log")
@@ -93,17 +90,16 @@ fn test_regression_log_valid() {
         .output()
         .expect("Failed to execute tiny-jail");
 
-    // Assert that tiny-jail exits with an error.
-    let status = output.status;
+    // Assert that tiny-jail exits successfully despite invalid syscall
     assert!(
-        status.success(),
-        "tiny-jail process should exit successfully"
+        output.status.success(),
+        "tiny-jail should exit successfully with warning"
     );
 
-    // Assert that the error message indicates an unknown argument.
+    // Assert that the warning is logged to stderr
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("Could not add log rule for syscall"),
-        "stderr should contain the correct warn message"
+        stdout.contains("Could not add log rule for unknown syscall: invalid"),
+        "stderr should contain the correct warning message"
     );
 }
