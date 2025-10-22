@@ -40,6 +40,7 @@ pub struct DecodedCode {
 pub enum MonitorError {
     CommandFailed(String),
     ParseError(String),
+    CallbackSuppressed,
 }
 
 const SECCOMP_RET_ACTION_FULL: u32 = 0xffff0000;
@@ -58,8 +59,11 @@ pub fn decode_code(raw: u32) -> DecodedCode {
 
 impl SeccompEvent {
     fn parse(line: &str) -> Result<Self, MonitorError> {
-        // Check if it's a seccomp audit entry (type=1326)
+        // Check if it's a seccomp audit entry (type=1326) or suppressed callbacks
         if !line.contains("type=1326") {
+            if line.contains("callbacks suppressede") {
+                return Err(MonitorError::CallbackSuppressed);
+            }
             return Err(MonitorError::ParseError(
                 "Not a seccomp audit entry".to_string(),
             ));
@@ -175,11 +179,16 @@ impl SeccompEvent {
         } else {
             "┌─ Seccomp Event ──────────────────────────────────────┐"
         };
+
+        let syscall_name = libseccomp::ScmpSyscall::from_raw_syscall(self.syscall as i32)
+            .get_name()
+            .unwrap_or("UNKNOWN".to_string());
+
         println!("{}", head);
 
         println!("│ Process: {} (PID: {})", self.comm, self.pid);
         println!("│ Executable: {}", self.exe);
-        println!("│ Syscall: {} (arch: {})", self.syscall, self.arch);
+        println!("│ Syscall: {}({})", syscall_name, self.syscall);
         println!(
             "│ User: uid={}, gid={}, auid={}, ses={}",
             self.uid, self.gid, self.auid, self.ses
@@ -307,6 +316,10 @@ pub fn monitor_seccomp_logs(
                         debug!("Skipping line: {}", l);
                         continue;
                     }
+                    Err(MonitorError::CallbackSuppressed) => {
+                        warn!("audit is being throttled, not all events will be shown");
+                        continue;
+                    }
                     Err(e) => {
                         error!("Could not parse the event: {:?}", e);
                         continue;
@@ -379,7 +392,7 @@ impl SeccompStats {
             .collect::<Vec<_>>();
 
         for (syscall, count) in syscall_names.iter().take(5) {
-            println!("  syscall {} - {} events", syscall, count);
+            println!("  * {} - {} events", syscall, count);
         }
 
         println!("\nTop Executables:");

@@ -70,6 +70,7 @@ struct FuzzArgs {
     ///
     /// To pass arguments to the executable that start with a hyphen, you must use `--`
     /// to separate the arguments for tiny-jail from the arguments for the executable.
+    ///
     /// For example: `tiny-jail fuzz -i 10 -- my-program --with-arg`
     #[arg(required = true, name = "EXECUTABLE_AND_ARGS", trailing_var_arg = true)]
     exec: Vec<String>,
@@ -84,11 +85,13 @@ struct ExecArgs {
     profile: Option<String>,
 
     /// Default action for syscalls not specified in the profile.
+    ///
     /// This will override the default action in the profile.
     #[arg(short = 'd', long, value_enum)]
     default_action: Option<Action>,
 
     /// Default errno return value for SCMP_ACT_ERRNO actions.
+    ///
     /// This will override the errno_ret in the profile.
     #[arg(short = 'e', long, value_name = "ERRNO_VALUE")]
     default_errno: Option<u32>,
@@ -97,6 +100,7 @@ struct ExecArgs {
     ///
     /// Will be enforced in addition to the specified profile.
     /// Can be specified multiple times.
+    ///
     /// For example: --kill write --kill read
     #[arg(long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
     kill: Vec<String>,
@@ -105,19 +109,28 @@ struct ExecArgs {
     ///
     /// Will be enforced in addition to the specified profile.
     /// Can be specified multiple times.
+    ///
     /// For example: --log write --log read
     #[arg(long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
     log: Vec<String>,
 
-    /// Change all SCMP_ACT_ALLOW rules to SCMP_ACT_LOG and show the logs in the output.
+    /// Prints the logged syscalls to the console.
+    ///
     /// Requires admin privileges.
     #[arg(short = 'w', long = "watch-logs")]
     show_log: bool,
+
+    /// Change all SCMP_ACT_ALLOW rules to SCMP_ACT_LOG and show the logs in the output.
+    ///
+    /// Requires admin privileges.
+    #[arg(short = 'W', long = "watch-all-logs")]
+    show_all: bool,
 
     /// The executable command to run and its arguments.
     ///
     /// To pass arguments to the executable that start with a hyphen, you must use `--`
     /// to separate the arguments for tiny-jail from the arguments for the executable.
+    ///
     /// For example: `tiny-jail exec --profile p.json -- ls -l`
     #[arg(required = true, name = "EXECUTABLE_AND_ARGS", trailing_var_arg = true)]
     exec: Vec<String>,
@@ -146,12 +159,18 @@ fn run() -> Result<(), AppError> {
                 exec_args.default_errno,
                 &exec_args.kill,
                 &exec_args.log,
-                exec_args.show_log,
+                exec_args.show_all,
             )?;
 
             info!("Running the given command...");
             debug!("Command: {:?}", exec_args.exec);
-            filtered_exec(filter, exec_args.exec, cli.env, exec_args.show_log)?;
+            filtered_exec(
+                filter,
+                exec_args.exec,
+                cli.env,
+                exec_args.show_log,
+                exec_args.show_all,
+            )?;
             info!("Execution finished.");
         }
         Commands::Fuzz(fuzz_args) => {
@@ -164,3 +183,4 @@ fn run() -> Result<(), AppError> {
 
     Ok(())
 }
+
