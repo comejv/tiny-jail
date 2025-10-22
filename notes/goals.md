@@ -18,24 +18,24 @@ The project will be aimed at **X86_64 Linux systems** and tested on CachyOS.
 
 ### Minimum Viable Product
 
-- [ ] calling the seccomp-bpf library (or a high-level wrapper like `libseccomp` or `seccompiler`) to create a sandboxed environment
-- [ ] handling of the command line arguments
-    - [ ] setting logging level, potentially using the `SECCOMP_FILTER_FLAG_LOG` flag or `ScmpFilterContext::set_ctl_log(true)`
-    - [ ] setting the sandboxing rules (e.g., specifying architecture as `SCMP_ARCH_X86_64`)
-- [ ] parsing sandboxing rules from a file
-    - [ ] defining the format of the file, preferably as an **OCI-compliant JSON structure**
-    - [ ] parsing the file to define the required list of system calls (`syscalls`) and a mandatory `defaultAction`
-- [ ] "complain mode" to log violations of the sandboxing rules
-- [ ] "enforce mode" to kill the process if a violation is detected
+- [x] calling the seccomp-bpf library (or a high-level wrapper like `libseccomp` or `seccompiler`) to create a sandboxed environment
+- [x] handling of the command line arguments
+    - [x] setting the sandboxing rules (e.g., specifying architecture as `SCMP_ARCH_X86_64`)
+- [x] parsing sandboxing rules from a file
+    - [x] defining the format of the file, preferably as an **OCI-compliant JSON structure**
+    - [x] parsing the file to define the required list of system calls (`syscalls`) and a mandatory `defaultAction`
+- [x] "complain mode" to log violations of the sandboxing rules
+- [x] "enforce mode" to kill the process if a violation is detected
 
 ### Additional Features
 
+- [ ] Handling of **abstract syscall groups** in the policy.
 - [ ] Implementing a **Hybrid Coverage-Guided Policy Generation** system which includes:
     - [ ] **Static Pre-Analysis** to establish a secure, restrictive baseline (Deny-by-Default posture).
     - [ ] **Coverage-Guided Fuzzing Refinement** to maximize execution path coverage and iteratively update the policy -> libAfl.
     - [ ] **Fuzzing Refinement Loop** using the loaded BPF filter to detect crashes/trace events (SECCOMP_RET_KILL) caused by undiscovered syscalls.
 - [ ] Providing a TUI to configure the sandboxing rules and generating the configuration file (outputting OCI-compliant JSON).
-- [ ] Logging of the system calls, possibly by using the `SCMP_ACT_LOG` action.
+- [x] Logging of the system calls, possibly by using the `SCMP_ACT_LOG` action.
 - [ ] Implementing **Syscall Argument Filtering** to achieve true Least Privilege compliance by generating complex BPF rules that check register values (arguments).
 - [ ] Exposing an API to allow for another instance of tiny-jail to monitor the first instance and dynamically update the BPF filter (through `SCMP_ACT_NOTIFY`, asking notify daemon what should be done about a new syscall).
 - [ ] Show “which syscalls seen / which missed”, timeline view, --explain SYS_open to show call sites if available.

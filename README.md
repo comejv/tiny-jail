@@ -13,6 +13,8 @@ The tool is conceptually inspired by the `seccomp` capabilities of projects like
 * [-] Handle abstract syscall groups in the policy.
 * [ ] Fuzzer-Based Dynamic Generation.
 
+See [notes/goals.md](notes/goals.md) for more details.
+
 ## Implementation and Policy Structure
 
 The implementation will leverage Rust's memory safety and concurrency features to safely and efficiently interact with the operating system. Key components include:
