@@ -195,8 +195,8 @@ impl SeccompEvent {
         println!("│ Executable: {}", self.exe);
         println!("│ Syscall: {}({})", self.syscall_name(), self.syscall);
         println!(
-            "│ User: uid={}, gid={}, auid={}, ses={}",
-            self.uid, self.gid, self.auid, self.ses
+            "│ User: uid=REDACTED, gid={}, auid={}, ses={}",
+            self.gid, self.auid, self.ses
         );
         println!("│ Action: {}", self.decoded_summary());
 
