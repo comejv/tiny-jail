@@ -18,7 +18,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Need full history to compare tags and generate logs
           fetch-depth: 0
 
       - name: Install dependencies
@@ -46,7 +45,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # robust parse via cargo metadata when available; fallback grep
           if command -v cargo >/dev/null 2>&1; then
             pkg_name=$(cargo metadata --no-deps --format-version=1 \
               | jq -r '.packages[0].name')
@@ -66,7 +64,6 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --tags --prune
-          # Find latest tag matching vX.Y.Z
           previous_tag=$(git tag --sort=-v:refname \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             | head -n 1 || true)
@@ -81,12 +78,28 @@ jobs:
             echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Compute previous ref for changelog
-        id: changelog_base
+      - name: Check if version has changed
+        id: version_check
         shell: bash
         run: |
           set -euo pipefail
-          # Use previous tag if present, otherwise the root commit
+          current_version="${{ steps.cargo_meta.outputs.version }}"
+          previous_version="${{ steps.prev_version.outputs.previous_version }}"
+
+          if [ "$current_version" = "$previous_version" ]; then
+            echo "⏭️  Version unchanged ($current_version). Skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "✅ Version changed: $previous_version → $current_version"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute previous ref for changelog
+        id: changelog_base
+        if: ${{ steps.version_check.outputs.should_release == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
           if [ -n "${{ steps.prev_version.outputs.previous_tag }}" ]; then
             echo "base_ref=${{ steps.prev_version.outputs.previous_tag }}" >> "$GITHUB_OUTPUT"
           else
@@ -95,11 +108,13 @@ jobs:
           fi
 
       - name: Run tests
+        if: ${{ steps.version_check.outputs.should_release == 'true' }}
         run: |
           set -euo pipefail
           cargo test --locked --verbose
 
       - name: Build release binary
+        if: ${{ steps.version_check.outputs.should_release == 'true' }}
         id: build
         shell: bash
         run: |
@@ -117,7 +132,6 @@ jobs:
           VERSION="${{ steps.cargo_meta.outputs.version }}"
           ASSET_NAME="${BIN}-v${VERSION}-${OS}-${ARCH}.tar.gz"
 
-          # Package the binary and LICENSE/README if present
           tmpdir="$(mktemp -d)"
           install -Dm755 "$SRC" "$tmpdir/$BIN"
           [ -f LICENSE ] && cp LICENSE "$tmpdir/"
@@ -128,6 +142,7 @@ jobs:
           echo "asset_path=${ASSET_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Ensure tag exists (create or move tag to current HEAD)
+        if: ${{ steps.version_check.outputs.should_release == 'true' }}
         id: ensure_tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -139,7 +154,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # If tag exists on origin, repoint it to current HEAD (force move)
           if git ls-remote --tags origin | grep -q "refs/tags/${tag}$"; then
             echo "Tag ${tag} exists on origin. Re-pointing it to HEAD of main."
             git tag -d "${tag}" || true
@@ -152,6 +166,7 @@ jobs:
           git push origin "${tag}"
 
       - name: Create or get GitHub Release for tag
+        if: ${{ steps.version_check.outputs.should_release == 'true' }}
         id: upsert_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -162,12 +177,10 @@ jobs:
           tag="${{ steps.cargo_meta.outputs.tag }}"
           api="https://api.github.com/repos/${owner_repo}"
 
-          # Build plain body text with real newlines
           body_text=$(printf 'Release %s\n\nChanges:\n%s\n' \
             "$tag" \
-            "**Full Changelog**: https://github.com/comejv/tiny-jail/compare/v${{ steps.cargo_meta.outputs.previous_version }}...v${{ steps.cargo_meta.outputs.version }}")
+            "**Full Changelog**: https://github.com/${owner_repo}/compare/v${{ steps.prev_version.outputs.previous_version }}...v${{ steps.cargo_meta.outputs.version }}")
 
-          # Try to get release by tag
           get_resp=$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
             "${api}/releases/tags/${tag}" || true)
 
@@ -176,7 +189,6 @@ jobs:
             upload_url=$(echo "$get_resp" | jq -r '.upload_url' | sed 's/{?name,label}//')
             echo "Found existing release id=${release_id} for ${tag}"
 
-            # Build JSON once; jq will escape newlines properly
             patch_payload=$(jq -n --arg body "$body_text" '{body: $body}')
             curl -sS -X PATCH \
               -H "Authorization: token $GITHUB_TOKEN" \
@@ -221,6 +233,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Remove existing asset with same name (if any)
+        if: ${{ steps.version_check.outputs.should_release == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -246,6 +259,7 @@ jobs:
           fi
 
       - name: Upload asset to release
+        if: ${{ steps.version_check.outputs.should_release == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
