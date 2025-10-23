@@ -38,7 +38,7 @@ pub enum ProfileError {
 // OCI Profile Structures
 // ============================================================================
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct OciSyscallArg {
     index: u8,
@@ -47,7 +47,7 @@ struct OciSyscallArg {
     op: String,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct OciSyscall {
     names: Vec<String>,
@@ -55,6 +55,13 @@ struct OciSyscall {
     errno_ret: Option<u32>,
     #[serde(default)]
     args: Vec<OciSyscallArg>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct AbstractSyscall {
+    names: Vec<String>,
+    action: Action,
 }
 
 fn default_architectures() -> Vec<String> {
@@ -69,6 +76,7 @@ struct OciSeccomp {
     #[serde(default = "default_architectures")]
     architectures: Vec<String>,
     syscalls: Option<Vec<OciSyscall>>,
+    abstract_syscalls: Option<Vec<AbstractSyscall>>,
 }
 
 // ============================================================================
@@ -399,5 +407,96 @@ mod tests {
             ScmpCompareOp::Greater
         );
         assert!(parse_compare_op("UNKNOWN_OP").is_err());
+    }
+
+    #[test]
+    fn test_parse_syscall() {
+        let profile = r#"
+        {
+            "defaultAction": "SCMP_ACT_ALLOW",
+            "architectures": [
+                "SCMP_ARCH_X86_64"
+            ],
+            "syscalls": [
+                {
+                    "names": [
+                        "write",
+                        "read"
+                    ],
+                    "action": "SCMP_ACT_LOG"
+                }
+            ]
+        }
+        "#;
+
+        let profile: OciSeccomp = if let Ok(profile) = serde_json::from_str(profile) {
+            profile
+        } else {
+            panic!("Failed to parse profile");
+        };
+
+        if let Some(syscalls) = profile.syscalls {
+            for syscall in syscalls {
+                assert_eq!(syscall.action, Action::Log);
+                for name in syscall.names {
+                    assert!(name.starts_with("write") || name.starts_with("read"));
+                }
+            }
+        } else {
+            println!("{:?}", profile);
+            panic!("No syscalls found");
+        }
+    }
+
+    #[test]
+    fn test_parse_abstract_syscall() {
+        let profile = r#"
+        {
+            "defaultAction": "SCMP_ACT_ALLOW",
+            "architectures": [
+                "SCMP_ARCH_X86_64"
+            ],
+            "syscalls": [
+                {
+                    "names": [
+                        "stat",
+                        "openat"
+                    ],
+                    "action": "SCMP_ACT_LOG"
+                }
+            ],
+            "abstractSyscalls": [
+                {
+                    "names": [
+                        "WriteOpen"
+                    ],
+                    "action": "SCMP_ACT_KILL"
+                }
+            ]
+        }
+        "#;
+
+        let profile: OciSeccomp = if let Ok(profile) = serde_json::from_str(profile) {
+            profile
+        } else {
+            panic!("Failed to parse profile");
+        };
+
+        if let Some(abstract_syscalls) = profile.abstract_syscalls {
+            for abstract_syscall in abstract_syscalls {
+                assert_eq!(
+                    abstract_syscall.action,
+                    Action::KillProcess,
+                    "{}",
+                    abstract_syscall.names.join(",")
+                );
+                for name in abstract_syscall.names {
+                    assert!(name.starts_with("WriteOpen"));
+                }
+            }
+        } else {
+            println!("{:?}", profile);
+            panic!("No abstract syscalls found");
+        }
     }
 }
