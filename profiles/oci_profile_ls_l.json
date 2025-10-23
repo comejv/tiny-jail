@@ -1,5 +1,6 @@
 {
     "defaultAction": "SCMP_ACT_ERRNO",
+    "defaultErrnoRet": 1,
     "architectures": [
         "SCMP_ARCH_X86_64"
     ],
@@ -13,16 +14,19 @@
                 "close",
                 "fstat",
                 "statx",
-                "llistxattr",
                 "mprotect",
                 "getdents64",
                 "lseek",
+                "munmap",
                 "pread64",
+                "llistxattr",
                 "prctl",
                 "write",
                 "futex",
                 "execve",
-                "arch_prctl"
+                "arch_prctl",
+                "brk",
+                "exit_group"
             ],
             "action": "SCMP_ACT_ALLOW"
         }
