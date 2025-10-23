@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::process::Child;
 use std::process::{Command, Stdio};
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use crate::actions::Action;
 
@@ -41,10 +42,13 @@ pub enum MonitorError {
     CommandFailed(String),
     ParseError(String),
     CallbackSuppressed,
+    NotStarted,
+    AlreadyStarted,
 }
 
 const SECCOMP_RET_ACTION_FULL: u32 = 0xffff0000;
 const SECCOMP_RET_DATA: u32 = 0x0000ffff;
+
 pub fn decode_code(raw: u32) -> DecodedCode {
     let class = raw & SECCOMP_RET_ACTION_FULL;
     let data = (raw & SECCOMP_RET_DATA) as u16;
@@ -145,14 +149,14 @@ impl SeccompEvent {
         self
     }
 
-    fn is_fatal(&self) -> bool {
+    pub fn is_fatal(&self) -> bool {
         matches!(
             self.decoded.action,
             Action::KillProcess | Action::KillThread
         ) || (matches!(self.decoded.action, Action::Trap) && self.sig == 31)
     }
 
-    fn decoded_summary(&self) -> String {
+    pub fn decoded_summary(&self) -> String {
         let d = &self.decoded;
         match d.action {
             Action::Allow => "ALLOW".to_string(),
@@ -172,6 +176,12 @@ impl SeccompEvent {
         }
     }
 
+    pub fn syscall_name(&self) -> String {
+        libseccomp::ScmpSyscall::from_raw_syscall(self.syscall as i32)
+            .get_name()
+            .unwrap_or("UNKNOWN".to_string())
+    }
+
     pub fn print_event(&self) {
         let fatal = self.is_fatal();
         let head = if fatal {
@@ -180,20 +190,14 @@ impl SeccompEvent {
             "┌─ Seccomp Event ──────────────────────────────────────┐"
         };
 
-        let syscall_name = libseccomp::ScmpSyscall::from_raw_syscall(self.syscall as i32)
-            .get_name()
-            .unwrap_or("UNKNOWN".to_string());
-
         println!("{}", head);
-
         println!("│ Process: {} (PID: {})", self.comm, self.pid);
         println!("│ Executable: {}", self.exe);
-        println!("│ Syscall: {}({})", syscall_name, self.syscall);
+        println!("│ Syscall: {}({})", self.syscall_name(), self.syscall);
         println!(
             "│ User: uid={}, gid={}, auid={}, ses={}",
             self.uid, self.gid, self.auid, self.ses
         );
-
         println!("│ Action: {}", self.decoded_summary());
 
         if self.sig != 0 {
@@ -213,138 +217,8 @@ impl SeccompEvent {
             self.decoded.raw, self.decoded.class, self.decoded.data
         );
         println!("│ Timestamp: {}", self.timestamp);
-
         println!("└─────────────────────────────────────────────────────┘\n");
     }
-}
-
-pub struct MonitorHandle {
-    pub thread: thread::JoinHandle<()>,
-    pub child_process: std::sync::Arc<std::sync::Mutex<Option<Child>>>,
-}
-
-impl MonitorHandle {
-    pub fn stop(self) {
-        debug!("Stopping monitor thread...");
-        // Kill the journalctl process
-        if let Ok(mut guard) = self.child_process.lock() {
-            if let Some(mut child) = guard.take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-        }
-        // Thread will exit when journalctl dies
-        let _ = self.thread.join();
-    }
-}
-
-pub fn monitor_seccomp_logs(
-    tx_events: Sender<SeccompEvent>,
-    tx_ready: Sender<()>,
-) -> Result<MonitorHandle, MonitorError> {
-    let child_process = Arc::new(Mutex::new(None));
-    let child_process_clone = child_process.clone();
-
-    let handle = thread::spawn(move || {
-        // 1) Refresh sudo credentials; this will prompt the user if needed.
-        match Command::new("sudo")
-            .arg("-v")
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()
-        {
-            Ok(status) if status.success() => {
-                // credentials are now cached
-            }
-            Ok(status) => {
-                error!("sudo –v failed, exit code {:?}", status.code());
-                let _ = tx_ready.send(()); // unblock parent so it can error out
-                return;
-            }
-            Err(e) => {
-                error!("failed to exec sudo –v: {}", e);
-                let _ = tx_ready.send(());
-                return;
-            }
-        }
-
-        // 2) Now spawn the actual dmesg monitor under sudo
-        let mut child = match Command::new("sudo")
-            .args(["dmesg", "-W", "-T"])
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-        {
-            Ok(c) => c,
-            Err(e) => {
-                error!("failed to start `sudo dmesg`: {}", e);
-                let _ = tx_ready.send(());
-                return;
-            }
-        };
-
-        // pull off the pipe and store the child handle
-        let stdout = match child.stdout.take() {
-            Some(s) => s,
-            None => {
-                error!("could not capture dmesg stdout");
-                let _ = tx_ready.send(());
-                let _ = child.kill();
-                let _ = child.wait();
-                return;
-            }
-        };
-        *child_process_clone.lock().unwrap() = Some(child);
-
-        // 3) Signal the parent that we are ready
-        let _ = tx_ready.send(());
-
-        // 4) Stream lines from dmesg → parse → tx_events
-        let reader = BufReader::new(stdout);
-        for line in reader.lines() {
-            match line {
-                Ok(l) => match SeccompEvent::parse(&l) {
-                    Ok(ev) => {
-                        if tx_events.send(ev).is_err() {
-                            error!("Could not send the event");
-                            continue;
-                        }
-                    }
-                    Err(MonitorError::ParseError(e)) if e.contains("Not a seccomp audit entry") => {
-                        debug!("Skipping line: {}", l);
-                        continue;
-                    }
-                    Err(MonitorError::CallbackSuppressed) => {
-                        warn!("audit is being throttled, not all events will be shown");
-                        continue;
-                    }
-                    Err(e) => {
-                        error!("Could not parse the event: {:?}", e);
-                        continue;
-                    }
-                },
-                Err(err) => {
-                    error!("error reading from dmesg: {}", err);
-                    continue;
-                }
-            }
-        }
-
-        // 5) Cleanup: kill dmesg if it's still running
-        if let Ok(mut guard) = child_process_clone.lock() {
-            if let Some(mut child) = guard.take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-        }
-    });
-
-    Ok(MonitorHandle {
-        thread: handle,
-        child_process,
-    })
 }
 
 #[derive(Default)]
@@ -356,6 +230,10 @@ pub struct SeccompStats {
 }
 
 impl SeccompStats {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn add_event(&mut self, event: &SeccompEvent) {
         self.total_events += 1;
         *self.by_process.entry(event.comm.clone()).or_insert(0) += 1;
@@ -401,6 +279,294 @@ impl SeccompStats {
         for (exe, count) in sorted_exes.iter().take(5) {
             println!("  {} - {} events", exe, count);
         }
+    }
+}
+
+/// Main monitor struct - use this for all monitoring operations
+pub struct SeccompMonitor {
+    rx_events: Option<Receiver<SeccompEvent>>,
+    thread_handle: Option<thread::JoinHandle<()>>,
+    child_process: Arc<Mutex<Option<Child>>>,
+    stats: SeccompStats,
+    running: bool,
+}
+
+impl SeccompMonitor {
+    /// Create a new monitor (doesn't start monitoring yet)
+    pub fn new() -> Self {
+        Self {
+            rx_events: None,
+            thread_handle: None,
+            child_process: Arc::new(Mutex::new(None)),
+            stats: SeccompStats::new(),
+            running: false,
+        }
+    }
+
+    /// Start monitoring seccomp events in the background
+    pub fn start(&mut self) -> Result<(), MonitorError> {
+        if self.running {
+            return Err(MonitorError::AlreadyStarted);
+        }
+
+        let (tx_events, rx_events) = channel();
+        let (tx_ready, rx_ready) = channel();
+        let child_process = self.child_process.clone();
+
+        let handle = thread::spawn(move || {
+            Self::monitor_thread(tx_events, tx_ready, child_process);
+        });
+
+        // Wait for thread to be ready
+        if rx_ready.recv_timeout(Duration::from_secs(5)).is_err() {
+            let _ = handle.join();
+            return Err(MonitorError::CommandFailed(
+                "Monitor thread failed to start".to_string(),
+            ));
+        }
+
+        self.rx_events = Some(rx_events);
+        self.thread_handle = Some(handle);
+        self.running = true;
+
+        info!("Seccomp monitor started");
+        Ok(())
+    }
+
+    /// Stop monitoring and clean up resources
+    pub fn stop(&mut self) {
+        if !self.running {
+            return;
+        }
+
+        debug!("Stopping monitor...");
+
+        // Kill the dmesg process
+        if let Ok(mut guard) = self.child_process.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+
+        // Wait for thread to finish
+        if let Some(handle) = self.thread_handle.take() {
+            let _ = handle.join();
+        }
+
+        self.rx_events = None;
+        self.running = false;
+
+        info!("Seccomp monitor stopped");
+    }
+
+    /// Check if the monitor is currently running
+    pub fn is_running(&self) -> bool {
+        self.running
+    }
+
+    /// Get the next event (non-blocking)
+    /// Returns None if no event is available
+    pub fn try_next_event(&mut self) -> Option<SeccompEvent> {
+        if !self.running {
+            return None;
+        }
+
+        if let Some(ref rx) = self.rx_events {
+            match rx.try_recv() {
+                Ok(event) => {
+                    self.stats.add_event(&event);
+                    Some(event)
+                }
+                Err(_) => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Get the next event (blocking with timeout)
+    pub fn next_event(&mut self, timeout: Duration) -> Option<SeccompEvent> {
+        if !self.running {
+            return None;
+        }
+
+        if let Some(ref rx) = self.rx_events {
+            match rx.recv_timeout(timeout) {
+                Ok(event) => {
+                    self.stats.add_event(&event);
+                    Some(event)
+                }
+                Err(_) => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Collect all available events without blocking
+    pub fn collect_events(&mut self) -> Vec<SeccompEvent> {
+        let mut events = Vec::new();
+        while let Some(event) = self.try_next_event() {
+            events.push(event);
+        }
+        events
+    }
+
+    /// Collect events for a specific duration
+    pub fn collect_for_duration(&mut self, duration: Duration) -> Vec<SeccompEvent> {
+        let start = std::time::Instant::now();
+        let mut events = Vec::new();
+
+        while start.elapsed() < duration {
+            let remaining = duration - start.elapsed();
+            if let Some(event) = self.next_event(remaining.min(Duration::from_millis(100))) {
+                events.push(event);
+            }
+        }
+
+        events
+    }
+
+    /// Run a callback for each event until stopped or timeout
+    pub fn on_event<F>(&mut self, mut callback: F, timeout: Option<Duration>)
+    where
+        F: FnMut(&SeccompEvent) -> bool, // return false to stop
+    {
+        let start = std::time::Instant::now();
+
+        loop {
+            if let Some(t) = timeout {
+                if start.elapsed() >= t {
+                    break;
+                }
+            }
+
+            if let Some(event) = self.next_event(Duration::from_millis(100)) {
+                if !callback(&event) {
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Get current statistics
+    pub fn stats(&self) -> &SeccompStats {
+        &self.stats
+    }
+
+    /// Get mutable statistics
+    pub fn stats_mut(&mut self) -> &mut SeccompStats {
+        &mut self.stats
+    }
+
+    /// Reset statistics
+    pub fn reset_stats(&mut self) {
+        self.stats = SeccompStats::new();
+    }
+
+    /// Internal monitoring thread implementation
+    fn monitor_thread(
+        tx_events: Sender<SeccompEvent>,
+        tx_ready: Sender<()>,
+        child_process: Arc<Mutex<Option<Child>>>,
+    ) {
+        // 1) Refresh sudo credentials
+        match Command::new("sudo")
+            .arg("-v")
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+        {
+            Ok(status) if status.success() => {}
+            Ok(status) => {
+                error!("sudo -v failed, exit code {:?}", status.code());
+                let _ = tx_ready.send(());
+                return;
+            }
+            Err(e) => {
+                error!("failed to exec sudo -v: {}", e);
+                let _ = tx_ready.send(());
+                return;
+            }
+        }
+
+        // 2) Spawn dmesg monitor
+        let mut child = match Command::new("sudo")
+            .args(["dmesg", "-W", "-T"])
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                error!("failed to start `sudo dmesg`: {}", e);
+                let _ = tx_ready.send(());
+                return;
+            }
+        };
+
+        let stdout = match child.stdout.take() {
+            Some(s) => s,
+            None => {
+                error!("could not capture dmesg stdout");
+                let _ = tx_ready.send(());
+                let _ = child.kill();
+                let _ = child.wait();
+                return;
+            }
+        };
+
+        *child_process.lock().unwrap() = Some(child);
+
+        // 3) Signal ready
+        let _ = tx_ready.send(());
+
+        // 4) Stream events
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            match line {
+                Ok(l) => match SeccompEvent::parse(&l) {
+                    Ok(ev) => {
+                        if tx_events.send(ev).is_err() {
+                            debug!("Event receiver dropped, stopping monitor");
+                            break;
+                        }
+                    }
+                    Err(MonitorError::ParseError(e)) if e.contains("Not a seccomp audit entry") => {
+                        continue;
+                    }
+                    Err(MonitorError::CallbackSuppressed) => {
+                        warn!("audit is being throttled, not all events will be shown");
+                        continue;
+                    }
+                    Err(e) => {
+                        error!("Could not parse the event: {:?}", e);
+                        continue;
+                    }
+                },
+                Err(err) => {
+                    error!("error reading from dmesg: {}", err);
+                    break;
+                }
+            }
+        }
+
+        // 5) Cleanup
+        if let Ok(mut guard) = child_process.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+}
+
+impl Drop for SeccompMonitor {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 

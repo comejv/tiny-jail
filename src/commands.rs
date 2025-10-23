@@ -8,15 +8,11 @@ use std::io;
 use std::io::Read;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::Command;
-use std::sync::{
-    mpsc::{self, Receiver},
-    Arc, Mutex,
-};
 use std::thread;
 use std::time::Duration;
 use thiserror::Error;
 
-use crate::monitor::{monitor_seccomp_logs, SeccompEvent, SeccompStats};
+use crate::monitor::SeccompMonitor;
 
 // ============================================================================
 // Error Types
@@ -64,7 +60,7 @@ pub fn filtered_exec(
     apply_seccomp_filter(&mut command, bpf_bytes);
 
     if show_log || show_all {
-        execute_with_monitoring(command)
+        execute_with_monitoring(command, show_all)
     } else {
         execute_without_monitoring(command)
     }
@@ -82,7 +78,6 @@ pub fn fuzz_exec(_path: Vec<String>, _pass_env: bool) -> Result<(), CommandError
 fn export_bpf_filter(ctx: &ScmpFilterContext) -> Result<Vec<u8>, CommandError> {
     #[cfg(libseccomp_2_6)]
     {
-        debug!("Exporting BPF filter to memory (libseccomp >= 2.6)");
         ctx.export_bpf_mem().map_err(CommandError::LibSeccomp)
     }
 
@@ -195,52 +190,39 @@ fn execute_without_monitoring(mut command: Command) -> Result<(), CommandError> 
 // Execution With Monitoring
 // ============================================================================
 
-fn execute_with_monitoring(mut command: Command) -> Result<(), CommandError> {
-    let monitor_ctx = start_monitoring()?;
-    let child_pid = spawn_child(&mut command)?;
-
-    // Wait for child and collect events
-    let status = wait_and_collect_events(child_pid, monitor_ctx)?;
-
-    handle_exit_status(status)
-}
-
-struct MonitorContext {
-    rx: Receiver<SeccompEvent>,
-    stats: Arc<Mutex<SeccompStats>>,
-    monitor_handle: Box<dyn FnOnce()>,
-}
-
-fn start_monitoring() -> Result<MonitorContext, CommandError> {
-    let (tx, rx) = mpsc::channel();
-    let (tx_ready, rx_ready) = mpsc::channel();
-    let stats = Arc::new(Mutex::new(SeccompStats::default()));
-
+fn execute_with_monitoring(mut command: Command, show_all: bool) -> Result<(), CommandError> {
+    // Start the monitor
+    let mut monitor = SeccompMonitor::new();
     warn!("Starting seccomp monitor (requires sudo)...\n");
 
-    let monitor_handle = monitor_seccomp_logs(tx, tx_ready)
+    monitor
+        .start()
         .map_err(|e| CommandError::Monitor(format!("{:?}", e)))?;
-
-    // Wait for monitor to be ready
-    match rx_ready.recv_timeout(Duration::from_secs(30)) {
-        Ok(()) => debug!("Monitor ready"),
-        Err(e) => {
-            monitor_handle.stop();
-            return Err(CommandError::Monitor(format!(
-                "Timeout waiting for monitor: {}",
-                e
-            )));
-        }
-    }
 
     // Small delay to ensure monitor is fully initialized
     thread::sleep(Duration::from_millis(500));
 
-    Ok(MonitorContext {
-        rx,
-        stats,
-        monitor_handle: Box::new(move || monitor_handle.stop()),
-    })
+    // Spawn the child process
+    let child_pid = spawn_child(&mut command)?;
+    debug!("Child process spawned with PID: {}", child_pid);
+
+    // Wait for child and collect events concurrently
+    let status = wait_and_collect_events(child_pid, &mut monitor, show_all)?;
+
+    // Allow final events to arrive
+    thread::sleep(Duration::from_millis(500));
+
+    // Collect any remaining events
+    let remaining_events = monitor.collect_events();
+    for event in remaining_events {
+        event.print_event();
+    }
+
+    // Stop monitoring and print summary
+    monitor.stop();
+    monitor.stats().print_summary();
+
+    handle_exit_status(status)
 }
 
 fn spawn_child(command: &mut Command) -> Result<u32, CommandError> {
@@ -257,35 +239,41 @@ fn spawn_child(command: &mut Command) -> Result<u32, CommandError> {
 
 fn wait_and_collect_events(
     child_pid: u32,
-    monitor_ctx: MonitorContext,
+    monitor: &mut SeccompMonitor,
+    show_all: bool,
 ) -> Result<std::process::ExitStatus, CommandError> {
-    // Spawn event processing thread
-    let stats_clone = Arc::clone(&monitor_ctx.stats);
-    let event_handle = thread::spawn(move || {
-        for event in monitor_ctx.rx {
-            event.print_event();
-            if let Ok(mut guard) = stats_clone.lock() {
-                guard.add_event(&event);
-            }
-        }
+    // Spawn wait thread
+    let (tx_status, rx_status) = std::sync::mpsc::channel();
+    let wait_handle = thread::spawn(move || {
+        let status = wait_for_child(child_pid);
+        let _ = tx_status.send(status);
     });
 
-    // Wait for the child using waitpid
-    let status = wait_for_child(child_pid)?;
+    // Main loop: collect and print events until child exits
+    loop {
+        // Check if child has exited (non-blocking)
+        match rx_status.try_recv() {
+            Ok(status_result) => {
+                let _ = wait_handle.join();
+                return status_result;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                // Child still running
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                return Err(CommandError::Monitor(
+                    "Wait thread disconnected".to_string(),
+                ));
+            }
+        }
 
-    // Allow final events to arrive
-    thread::sleep(Duration::from_millis(500));
-
-    // Stop monitoring and wait for event thread
-    (monitor_ctx.monitor_handle)();
-    let _ = event_handle.join();
-
-    // Print summary
-    if let Ok(guard) = monitor_ctx.stats.lock() {
-        guard.print_summary();
+        // Collect and print events
+        if let Some(event) = monitor.next_event(Duration::from_millis(100)) {
+            if show_all || event.is_fatal() {
+                event.print_event();
+            }
+        }
     }
-
-    Ok(status)
 }
 
 fn wait_for_child(pid: u32) -> Result<std::process::ExitStatus, CommandError> {
