@@ -1,0 +1,38 @@
+graph TD
+    subgraph EntryPoint
+        A[main.rs]
+    end
+
+    subgraph CoreLogic
+        B[filters.rs]
+        C[commands.rs]
+        D[monitor.rs]
+        E[actions.rs]
+    end
+
+    subgraph ExternalDependencies
+        I[dmesg]
+    end
+
+    %% Edge 0-2: Dependencies
+    B --> E
+    D --> E
+
+    %% Edge 3-5: Control Flow
+    A --> B
+    A --> C
+    C --> D
+
+    %% Edge 6-8: Data Flow
+    B -->|SCMP context| C
+    I -->|audit log| D
+    D -->|syscall events| C
+
+    %% Styling: Dependencies
+    linkStyle 0,1 stroke:black,stroke-width:2px
+
+    %% Styling: Control Flow
+    linkStyle 2,3,4 stroke:blue,stroke-width:3px
+
+    %% Styling: Data Flow
+    linkStyle 5,6,7 stroke:green,stroke-width:2px,stroke-dasharray:5 5

@@ -176,28 +176,33 @@ Simple mapping of all syscall names to their numbers and ABI.
 
 ---
 
-## Usage Example
+## 4. OCI Linux Container Configuration for Seccomp
 
-### Allow a functional group (e.g., file reading):
-```rust
-// Load the merged data
-let data: SeccompData = serde_json::from_str(&content)?;
+**Purpose:** OCI Linux Container Configuration (OCI 1.1) for seccomp rules.
 
-// Allow all syscalls in the ReadOpen group
-let read_open = &data.abstract_groups["ReadOpen"];
-for rule in &read_open.rules {
-    if let Some(condition) = &rule.condition {
-        // Apply with condition
-        filter.add_rule_conditional(rule.number, condition)?;
-    } else {
-        // Allow unconditionally
-        filter.add_rule(rule.number)?;
+**Structure:**
+```json
+{
+  "defaultAction": "SCMP_ACT_***",
+  "defaultErrnoRet": ***,
+  "architectures": [
+    "SCMP_ARCH_X86_64"
+  ],
+  "syscalls": [
+    {
+      "names": [
+        "***",
+        "***"
+      ],
+      "action": "SCMP_ACT_***"
+    },
+    {
+      "names": [
+        "***",
+        "***"
+      ],
+      "action": "SCMP_ACT_***"
     }
+  ]
 }
-```
-
-### Allow a specific syscall:
-```rust
-let read_num = data.syscalls["read"].number;
-filter.add_rule(read_num)?;
 ```
