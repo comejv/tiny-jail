@@ -242,10 +242,14 @@ impl SeccompStats {
     }
 
     pub fn print_summary(&self) {
+        if self.total_events == 0 {
+            info!("No events logged");
+            return;
+        }
         println!("\n═══════════════════════════════════════════════");
         println!("          SECCOMP STATISTICS");
         println!("═══════════════════════════════════════════════");
-        println!("Total Events: {}\n", self.total_events);
+        println!("Total Logged Events: {}\n", self.total_events);
 
         println!("Top Processes:");
         let mut sorted_procs: Vec<_> = self.by_process.iter().collect();
@@ -561,6 +565,12 @@ impl SeccompMonitor {
                 let _ = child.wait();
             }
         }
+    }
+}
+
+impl Default for SeccompMonitor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
