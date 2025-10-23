@@ -1,6 +1,7 @@
 use libseccomp::{error::SeccompError, ScmpFilterContext};
 use log2::*;
 use nix::libc;
+use nix::sys::signal::Signal;
 use nix::sys::wait::{waitpid, WaitStatus};
 use nix::unistd::Pid;
 use std::io;
@@ -305,10 +306,6 @@ fn wait_for_child(pid: u32) -> Result<std::process::ExitStatus, CommandError> {
     }
 }
 
-// ============================================================================
-// Exit Status Handling
-// ============================================================================
-
 fn handle_exit_status(status: std::process::ExitStatus) -> Result<(), CommandError> {
     if status.success() {
         info!("Child exited normally");
@@ -317,15 +314,29 @@ fn handle_exit_status(status: std::process::ExitStatus) -> Result<(), CommandErr
         warn!("Child exited with code: {}", code);
         Err(CommandError::UnexpectedExit)
     } else if let Some(signal) = status.signal() {
+        warn!(
+            "Child terminated by signal: {} ({})",
+            signal,
+            get_signal_name(signal)
+        );
         if signal == libc::SIGSYS {
-            info!("Child terminated by seccomp (SIGSYS)");
+            info!("Seccomp violation detected");
             Ok(())
+        } else if signal == libc::SIGSEGV {
+            warn!("SIGSEGV - likely caused by blocked syscall");
+            Err(CommandError::UnexpectedSignal)
         } else {
-            warn!("Child terminated by signal: {}", signal);
             Err(CommandError::UnexpectedSignal)
         }
     } else {
         warn!("Child exited with unknown status: {:?}", status);
         Err(CommandError::UnexpectedExit)
+    }
+}
+
+fn get_signal_name(signal: i32) -> String {
+    match Signal::try_from(signal) {
+        Ok(sig) => format!("{:?}", sig),
+        Err(_) => format!("UNKNOWN({})", signal),
     }
 }
