@@ -8,7 +8,7 @@ The three files serve different purposes:
 
 1. **`syscalls.json`** - Raw syscall definitions from the kernel
 2. **`abstract_syscalls.json`** - Functional groupings of related syscalls
-3. **`seccomp_data.json`** - Merged data ready for seccomp rule generation
+3. **`seccomp_rules.json`** - Merged data ready for seccomp rule generation
 4. **`oci_1-1.md`** - OCI Linux Container Configuration (seccomp rules)
 
 ---
