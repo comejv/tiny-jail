@@ -1,7 +1,6 @@
 {
   "open_read": {
     "description": "Open files for reading only",
-    "parameters": ["path"],
     "rules": [
       {
         "name": "open",

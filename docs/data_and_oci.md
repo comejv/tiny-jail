@@ -38,22 +38,22 @@ The three files serve different purposes:
 ```
 
 **Fields:**
-- `number` - Syscall number used by seccomp filters
-- `abi` - Application Binary Interface: `common`, `64`, or `x32`
-- `name` - Syscall name as called from userspace
-- `entry_point` - Kernel function name (with `sys_` prefix)
+* `number` - Syscall number used by seccomp filters
+* `abi` - Application Binary Interface: `common`, `64`, or `x32`
+* `name` - Syscall name as called from userspace
+* `entry_point` - Kernel function name (with `sys_` prefix)
 
 **Use Case:**
-- Reference for all available syscalls
-- Looking up syscall numbers for direct filtering
-- Understanding which syscalls exist on the system
+* Reference for all available syscalls
+* Looking up syscall numbers for direct filtering
+* Understanding which syscalls exist on the system
 
 ---
 
 ## 2. `abstract_syscalls.json` - Functional Groups
 
 > [!NOTE]
-> These groups are the work of [R. Sekar](https://www.seclab.cs.sunysb.edu/sekar/) available at <https://www.seclab.cs.sunysb.edu/sekar/papers/syscallclassif.htm>
+> These groups are inspired by the work of [R. Sekar](https://www.seclab.cs.sunysb.edu/sekar/) available at <https://www.seclab.cs.sunysb.edu/sekar/papers/syscallclassif.htm>
 
 **Purpose:** Groups related syscalls by functionality to simplify policy creation.
 
@@ -62,123 +62,69 @@ The three files serve different purposes:
 **Structure:**
 ```json
 {
-  "WriteOpen": {
-    "parameters": "path",
-    "description": "open and possibly create a file for write",
-    "implementations": [
+  "stdio_app": {
+    "description": "Application with stdin/stdout/stderr",
+    "rules": [
       {
-        "call": "open(path, flags)",
-        "base_name": "open",
-        "condition": "(flags & (O_WRONLY | O_APPEND | O_TRUNC))"
+        "name": "read",
+        "conditions": [
+          {
+            "type": "equals",
+            "argument": "fd",
+            "value": "0"
+          }
+        ]
       },
       {
-        "call": "creat(path, mode)",
-        "base_name": "creat"
-      }
+        "name": "write",
+        "conditions": [
+          {
+            "type": "equals",
+            "argument": "fd",
+            "value": "1"
+          }
+        ]
+      },
+      {
+        "name": "write",
+        "conditions": [
+          {
+            "type": "equals",
+            "argument": "fd",
+            "value": "2"
+          }
+        ]
+      },
+      { "group": "close_ops" },
+      { "group": "memory_allocate" },
+      { "group": "exit_ops" }
     ]
-  }
+  },
 }
 ```
 
 **Fields:**
-- `parameters` - Abstract parameters for the functional group
-- `description` - What this group of syscalls does
-- `implementations` - List of syscalls that implement this functionality
-  - `call` - Full syscall signature
-  - `base_name` - Syscall name
-  - `condition` - Optional filtering condition (e.g., flag requirements)
+* `description` - What this group of syscalls does
+* `rules` - List of rules that can be either:
+  * a syscall name and its conditions: `{ "name": "open", "conditions": [] }`
+  * a group reference: `{ "group": "WriteOpen" }`
 
 **Example Groups:**
-- `WriteOpen` - Opening files for writing
-- `ReadOpen` - Opening files for reading
-- `chmod_2` - Changing file permissions (via `chmod` or `fchmod`)
-- `recv_2` - Receiving data (via `recv`, `recvfrom`, or `recvmsg`)
+* `open_read` - Opening files for reading only
+* `close_ops` - Opening files for writing (includes O_WRONLY and O_RDWR)
+* `chmod_ops` - Changing file permissions (via `chmod` or `fchmod` or `fchmodat`)
+* `socket_inet` - Creating Internet sockets (AF_INET, AF_INET6)
 
 **Use Case:**
-- Understanding syscall relationships
-- Writing high-level security policies
-- Documentation of syscall semantics
+* Understanding syscall relationships
+* Writing high-level security policies
+* Documentation of syscall semantics
 
 ---
 
-## 3. `seccomp_data.json` - Merged Seccomp Rules
+## 4. Extended OCI Linux Container Configuration for Seccomp
 
-**Purpose:** Combined data optimized for seccomp rule generation in Rust/C programs.
-
-**Source:** Automatically merged from `syscalls.json` and `abstract_syscalls.json`
-
-**Structure:**
-```json
-{
-  "abstract_groups": {
-    "WriteOpen": {
-      "description": "open and possibly create a file for write",
-      "parameters": "path",
-      "rules": [
-        {
-          "name": "open",
-          "number": 2,
-          "call": "open(path, flags)",
-          "condition": {
-            "type": "bitwise_and",
-            "argument": "flags",
-            "flags": "O_WRONLY | O_APPEND | O_TRUNC",
-            "raw": "(flags & (O_WRONLY | O_APPEND | O_TRUNC))"
-          }
-        },
-        {
-          "name": "creat",
-          "number": 85,
-          "call": "creat(path, mode)"
-        }
-      ]
-    }
-  },
-  "syscalls": {
-    "read": {
-      "number": 0,
-      "abi": "common"
-    },
-    "open": {
-      "number": 2,
-      "abi": "common"
-    }
-  }
-}
-```
-
-**Fields:**
-
-### `abstract_groups`
-Functional groups with resolved syscall numbers and parsed conditions.
-
-Each group contains:
-- `description` - What the group does
-- `parameters` - Abstract parameters
-- `rules` - List of concrete syscall rules
-  - `name` - Syscall name
-  - `number` - Syscall number for seccomp filtering
-  - `call` - Full function signature
-  - `condition` - Structured condition for argument filtering
-    - `type` - Condition type: `bitwise_and`, `equality`, or `raw`
-    - `argument` - Which argument to check
-    - `flags` - Flag values to check (for bitwise_and)
-    - `raw` - Original condition string
-
-### `syscalls`
-Simple mapping of all syscall names to their numbers and ABI.
-
-**Use Case:**
-- **Primary file for implementing seccomp rules**
-- Direct mapping from abstract groups to syscall numbers
-- Structured conditions ready for seccomp argument filtering
-- Quick lookup for individual syscalls
-
----
-
-## 4. OCI Linux Container Configuration for Seccomp
-
-**Purpose:** OCI Linux Container Configuration (OCI 1.1) for seccomp rules.
+**Purpose:** OCI Linux Container Configuration (OCI 1.1) for seccomp rules with support for abstract syscalls.
 
 **Structure:**
 ```json
@@ -203,6 +149,26 @@ Simple mapping of all syscall names to their numbers and ABI.
       ],
       "action": "SCMP_ACT_***"
     }
+  ],
+  "abstractSyscalls": [
+    {
+      "names": [
+        "WriteOpen"
+      ],
+      "action": "SCMP_ACT_KILL"
+    }
   ]
 }
 ```
+
+**Fields:**
+* `defaultAction` - Default action for syscalls not specified in the profile
+* `defaultErrnoRet` - Default errno return value for SCMP_ACT_ERRNO actions
+* `architectures` - List of architectures supported by the profile
+* `syscalls` - List of syscalls to apply the profile to
+* `abstractSyscalls` - List of abstract syscalls to apply the profile to (our addition to the OCI spec)
+
+**Use Case:**
+* Applying a security policy to a container
+* Applying a security policy to a process
+
