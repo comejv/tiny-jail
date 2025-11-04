@@ -34,6 +34,8 @@
           pkgs.vimPlugins.nvim-treesitter-parsers.rust
 
           pkgs.libseccomp
+
+          pkgs.gdb
         ];
         shellHook = ''
           export CARGO_HOME=$PWD/.cargo

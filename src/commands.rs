@@ -281,12 +281,10 @@ fn wait_for_child(pid: u32) -> Result<std::process::ExitStatus, CommandError> {
     loop {
         match waitpid(Pid::from_raw(pid as i32), None) {
             Ok(WaitStatus::Exited(_, code)) => {
-                debug!("Child exited with code: {}", code);
                 let raw_status = code << 8;
                 return Ok(std::process::ExitStatus::from_raw(raw_status));
             }
             Ok(WaitStatus::Signaled(_, signal, _)) => {
-                debug!("Child killed by signal: {:?}", signal);
                 let raw_status = signal as i32;
                 return Ok(std::process::ExitStatus::from_raw(raw_status));
             }

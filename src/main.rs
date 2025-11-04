@@ -183,4 +183,3 @@ fn run() -> Result<(), AppError> {
 
     Ok(())
 }
-
