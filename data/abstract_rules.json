@@ -1,0 +1,1992 @@
+{
+  "open_read": {
+    "description": "Open files for reading only",
+    "parameters": ["path"],
+    "rules": [
+      {
+        "name": "open",
+        "conditions": [
+          {
+            "type": "bitmask_none",
+            "argument": "flags",
+            "flags": "O_WRONLY|O_RDWR"
+          }
+        ]
+      },
+      {
+        "name": "openat",
+        "conditions": [
+          {
+            "type": "bitmask_none",
+            "argument": "flags",
+            "flags": "O_WRONLY|O_RDWR"
+          }
+        ]
+      }
+    ]
+  },
+  "open_write": {
+    "description": "Open files for writing (includes O_WRONLY and O_RDWR)",
+    "rules": [
+      {
+        "name": "open",
+        "conditions": [
+          {
+            "type": "bitmask_any",
+            "argument": "flags",
+            "flags": "O_WRONLY|O_RDWR"
+          }
+        ]
+      },
+      {
+        "name": "openat",
+        "conditions": [
+          {
+            "type": "bitmask_any",
+            "argument": "flags",
+            "flags": "O_WRONLY|O_RDWR"
+          }
+        ]
+      }
+    ]
+  },
+  "open_create": {
+    "description": "Open with O_CREAT flag (create if doesn't exist)",
+    "rules": [
+      {
+        "name": "open",
+        "conditions": [
+          {
+            "type": "bitmask_all",
+            "argument": "flags",
+            "flags": "O_CREAT"
+          }
+        ]
+      },
+      {
+        "name": "openat",
+        "conditions": [
+          {
+            "type": "bitmask_all",
+            "argument": "flags",
+            "flags": "O_CREAT"
+          }
+        ]
+      },
+      {
+        "name": "creat",
+        "conditions": []
+      }
+    ]
+  },
+  "open_truncate": {
+    "description": "Open with O_TRUNC flag (truncate to zero)",
+    "rules": [
+      {
+        "name": "open",
+        "conditions": [
+          {
+            "type": "bitmask_all",
+            "argument": "flags",
+            "flags": "O_TRUNC"
+          }
+        ]
+      },
+      {
+        "name": "openat",
+        "conditions": [
+          {
+            "type": "bitmask_all",
+            "argument": "flags",
+            "flags": "O_TRUNC"
+          }
+        ]
+      }
+    ]
+  },
+  "open_append": {
+    "description": "Open with O_APPEND flag (append mode)",
+    "rules": [
+      {
+        "name": "open",
+        "conditions": [
+          {
+            "type": "bitmask_all",
+            "argument": "flags",
+            "flags": "O_APPEND"
+          }
+        ]
+      },
+      {
+        "name": "openat",
+        "conditions": [
+          {
+            "type": "bitmask_all",
+            "argument": "flags",
+            "flags": "O_APPEND"
+          }
+        ]
+      }
+    ]
+  },
+  "open_any": {
+    "description": "Open files with any flags",
+    "rules": [
+      {
+        "name": "open",
+        "conditions": []
+      },
+      {
+        "name": "openat",
+        "conditions": []
+      },
+      {
+        "name": "creat",
+        "conditions": []
+      }
+    ]
+  },
+  "read_ops": {
+    "description": "Read data from file descriptors",
+    "rules": [
+      {
+        "name": "read",
+        "conditions": []
+      },
+      {
+        "name": "readv",
+        "conditions": []
+      },
+      {
+        "name": "pread64",
+        "conditions": []
+      },
+      {
+        "name": "preadv",
+        "conditions": []
+      },
+      {
+        "name": "preadv2",
+        "conditions": []
+      }
+    ]
+  },
+  "write_ops": {
+    "description": "Write data to file descriptors",
+    "rules": [
+      {
+        "name": "write",
+        "conditions": []
+      },
+      {
+        "name": "writev",
+        "conditions": []
+      },
+      {
+        "name": "pwrite64",
+        "conditions": []
+      },
+      {
+        "name": "pwritev",
+        "conditions": []
+      },
+      {
+        "name": "pwritev2",
+        "conditions": []
+      }
+    ]
+  },
+  "close_ops": {
+    "description": "Close file descriptors",
+    "rules": [
+      {
+        "name": "close",
+        "conditions": []
+      },
+      {
+        "name": "close_range",
+        "conditions": []
+      }
+    ]
+  },
+  "seek_ops": {
+    "description": "Seek within files",
+    "rules": [
+      {
+        "name": "lseek",
+        "conditions": []
+      }
+    ]
+  },
+  "file_read": {
+    "description": "Complete file reading workflow (open + read + close)",
+    "rules": [
+      { "group": "open_read" },
+      { "group": "read_ops" },
+      { "group": "close_ops" },
+      { "group": "seek_ops" }
+    ]
+  },
+  "file_write": {
+    "description": "Complete file writing workflow (open + write + close)",
+    "rules": [
+      { "group": "open_write" },
+      { "group": "write_ops" },
+      { "group": "close_ops" },
+      { "group": "seek_ops" }
+    ]
+  },
+  "file_create": {
+    "description": "Create new files",
+    "rules": [
+      { "group": "open_create" }
+    ]
+  },
+  "file_modify": {
+    "description": "Modify existing files (write, truncate, append)",
+    "rules": [
+      { "group": "open_write" },
+      { "group": "open_truncate" },
+      { "group": "open_append" },
+      { "group": "write_ops" },
+      { "group": "close_ops" },
+      { "group": "seek_ops" }
+    ]
+  },
+  "stat_ops": {
+    "description": "Get file status and attributes",
+    "rules": [
+      {
+        "name": "stat",
+        "conditions": []
+      },
+      {
+        "name": "fstat",
+        "conditions": []
+      },
+      {
+        "name": "lstat",
+        "conditions": []
+      },
+      {
+        "name": "newfstatat",
+        "conditions": []
+      },
+      {
+        "name": "statx",
+        "conditions": []
+      },
+      {
+        "name": "llistxattr",
+        "conditions": []
+      }
+    ]
+  },
+  "access_check": {
+    "description": "Check file accessibility",
+    "rules": [
+      {
+        "name": "access",
+        "conditions": []
+      },
+      {
+        "name": "faccessat",
+        "conditions": []
+      },
+      {
+        "name": "faccessat2",
+        "conditions": []
+      }
+    ]
+  },
+  "file_metadata_read": {
+    "description": "Read file metadata (stat, access checks)",
+    "rules": [
+      { "group": "stat_ops" },
+      { "group": "access_check" }
+    ]
+  },
+  "chmod_ops": {
+    "description": "Change file permissions",
+    "rules": [
+      {
+        "name": "chmod",
+        "conditions": []
+      },
+      {
+        "name": "fchmod",
+        "conditions": []
+      },
+      {
+        "name": "fchmodat",
+        "conditions": []
+      }
+    ]
+  },
+  "chown_ops": {
+    "description": "Change file ownership",
+    "rules": [
+      {
+        "name": "chown",
+        "conditions": []
+      },
+      {
+        "name": "fchown",
+        "conditions": []
+      },
+      {
+        "name": "lchown",
+        "conditions": []
+      },
+      {
+        "name": "fchownat",
+        "conditions": []
+      }
+    ]
+  },
+  "utime_ops": {
+    "description": "Change file timestamps",
+    "rules": [
+      {
+        "name": "utime",
+        "conditions": []
+      },
+      {
+        "name": "utimes",
+        "conditions": []
+      },
+      {
+        "name": "futimesat",
+        "conditions": []
+      },
+      {
+        "name": "utimensat",
+        "conditions": []
+      }
+    ]
+  },
+  "file_metadata_write": {
+    "description": "Modify file metadata (permissions, ownership, timestamps)",
+    "rules": [
+      { "group": "chmod_ops" },
+      { "group": "chown_ops" },
+      { "group": "utime_ops" }
+    ]
+  },
+  "truncate_ops": {
+    "description": "Truncate files",
+    "rules": [
+      {
+        "name": "truncate",
+        "conditions": []
+      },
+      {
+        "name": "ftruncate",
+        "conditions": []
+      }
+    ]
+  },
+  "sync_ops": {
+    "description": "Synchronize file data to disk",
+    "rules": [
+      {
+        "name": "fsync",
+        "conditions": []
+      },
+      {
+        "name": "fdatasync",
+        "conditions": []
+      },
+      {
+        "name": "sync",
+        "conditions": []
+      },
+      {
+        "name": "syncfs",
+        "conditions": []
+      },
+      {
+        "name": "sync_file_range",
+        "conditions": []
+      }
+    ]
+  },
+  "link_ops": {
+    "description": "Create hard and symbolic links",
+    "rules": [
+      {
+        "name": "link",
+        "conditions": []
+      },
+      {
+        "name": "linkat",
+        "conditions": []
+      },
+      {
+        "name": "symlink",
+        "conditions": []
+      },
+      {
+        "name": "symlinkat",
+        "conditions": []
+      }
+    ]
+  },
+  "unlink_ops": {
+    "description": "Remove files and links",
+    "rules": [
+      {
+        "name": "unlink",
+        "conditions": []
+      },
+      {
+        "name": "unlinkat",
+        "conditions": []
+      }
+    ]
+  },
+  "rename_ops": {
+    "description": "Rename and move files",
+    "rules": [
+      {
+        "name": "rename",
+        "conditions": []
+      },
+      {
+        "name": "renameat",
+        "conditions": []
+      },
+      {
+        "name": "renameat2",
+        "conditions": []
+      }
+    ]
+  },
+  "readlink_ops": {
+    "description": "Read symbolic link contents",
+    "rules": [
+      {
+        "name": "readlink",
+        "conditions": []
+      },
+      {
+        "name": "readlinkat",
+        "conditions": []
+      }
+    ]
+  },
+  "file_links": {
+    "description": "All link-related operations",
+    "rules": [
+      { "group": "link_ops" },
+      { "group": "unlink_ops" },
+      { "group": "readlink_ops" }
+    ]
+  },
+  "file_reorganize": {
+    "description": "File organization operations (rename, link, unlink)",
+    "rules": [
+      { "group": "rename_ops" },
+      { "group": "link_ops" },
+      { "group": "unlink_ops" }
+    ]
+  },
+  "mkdir_ops": {
+    "description": "Create directories",
+    "rules": [
+      {
+        "name": "mkdir",
+        "conditions": []
+      },
+      {
+        "name": "mkdirat",
+        "conditions": []
+      }
+    ]
+  },
+  "rmdir_ops": {
+    "description": "Remove directories",
+    "rules": [
+      {
+        "name": "rmdir",
+        "conditions": []
+      }
+    ]
+  },
+  "readdir_ops": {
+    "description": "Read directory contents",
+    "rules": [
+      {
+        "name": "getdents",
+        "conditions": []
+      },
+      {
+        "name": "getdents64",
+        "conditions": []
+      }
+    ]
+  },
+  "chdir_ops": {
+    "description": "Change working directory",
+    "rules": [
+      {
+        "name": "chdir",
+        "conditions": []
+      },
+      {
+        "name": "fchdir",
+        "conditions": []
+      }
+    ]
+  },
+  "getcwd_ops": {
+    "description": "Get current working directory",
+    "rules": [
+      {
+        "name": "getcwd",
+        "conditions": []
+      }
+    ]
+  },
+  "dir_ops": {
+    "description": "Directory operations (create, remove, read, navigate)",
+    "rules": [
+      { "group": "mkdir_ops" },
+      { "group": "rmdir_ops" },
+      { "group": "readdir_ops" },
+      { "group": "chdir_ops" },
+      { "group": "getcwd_ops" }
+    ]
+  },
+  "file_basic": {
+    "description": "Basic file operations (read, write, metadata)",
+    "rules": [
+      { "group": "file_read" },
+      { "group": "file_write" },
+      { "group": "file_metadata_read" }
+    ]
+  },
+  "file_management": {
+    "description": "Comprehensive file management (all file operations)",
+    "rules": [
+      { "group": "file_basic" },
+      { "group": "file_create" },
+      { "group": "file_metadata_write" },
+      { "group": "file_reorganize" },
+      { "group": "truncate_ops" },
+      { "group": "sync_ops" }
+    ]
+  },
+  "filesystem_readonly": {
+    "description": "Read-only filesystem access",
+    "rules": [
+      { "group": "open_read" },
+      { "group": "read_ops" },
+      { "group": "close_ops" },
+      { "group": "seek_ops" },
+      { "group": "file_metadata_read" },
+      { "group": "readdir_ops" },
+      { "group": "getcwd_ops" }
+    ]
+  },
+  "filesystem_full": {
+    "description": "Full filesystem access (read, write, create, delete)",
+    "rules": [
+      { "group": "file_management" },
+      { "group": "dir_ops" }
+    ]
+  },
+  "dup_ops": {
+    "description": "Duplicate file descriptors",
+    "rules": [
+      {
+        "name": "dup",
+        "conditions": []
+      },
+      {
+        "name": "dup2",
+        "conditions": []
+      },
+      {
+        "name": "dup3",
+        "conditions": []
+      }
+    ]
+  },
+  "fcntl_ops": {
+    "description": "File descriptor control operations",
+    "rules": [
+      {
+        "name": "fcntl",
+        "conditions": []
+      }
+    ]
+  },
+  "ioctl_ops": {
+    "description": "Device I/O control operations",
+    "rules": [
+      {
+        "name": "ioctl",
+        "conditions": []
+      }
+    ]
+  },
+  "flock_ops": {
+    "description": "File locking operations",
+    "rules": [
+      {
+        "name": "flock",
+        "conditions": []
+      }
+    ]
+  },
+  "fd_control": {
+    "description": "File descriptor management and control",
+    "rules": [
+      { "group": "dup_ops" },
+      { "group": "fcntl_ops" },
+      { "group": "flock_ops" }
+    ]
+  },
+  "pipe_ops": {
+    "description": "Create pipes for IPC",
+    "rules": [
+      {
+        "name": "pipe",
+        "conditions": []
+      },
+      {
+        "name": "pipe2",
+        "conditions": []
+      }
+    ]
+  },
+  "fork_ops": {
+    "description": "Fork processes",
+    "rules": [
+      {
+        "name": "fork",
+        "conditions": []
+      },
+      {
+        "name": "vfork",
+        "conditions": []
+      }
+    ]
+  },
+  "clone_thread": {
+    "description": "Clone for threading (CLONE_THREAD)",
+    "rules": [
+      {
+        "name": "clone",
+        "conditions": [
+          {
+            "type": "bitmask_all",
+            "argument": "flags",
+            "flags": "CLONE_THREAD"
+          }
+        ]
+      },
+      {
+        "name": "clone3",
+        "conditions": []
+      }
+    ]
+  },
+  "clone_process": {
+    "description": "Clone without CLONE_THREAD (process-like)",
+    "rules": [
+      {
+        "name": "clone",
+        "conditions": [
+          {
+            "type": "bitmask_none",
+            "argument": "flags",
+            "flags": "CLONE_THREAD"
+          }
+        ]
+      }
+    ]
+  },
+  "clone_any": {
+    "description": "Clone with any flags",
+    "rules": [
+      {
+        "name": "clone",
+        "conditions": []
+      },
+      {
+        "name": "clone3",
+        "conditions": []
+      }
+    ]
+  },
+  "threads_create": {
+    "description": "Create and manage new threads",
+    "rules": [
+      {
+        "name": "set_tid_address",
+        "conditions": []
+      },
+      { "group": "clone_any" },
+      { "group": "futex_ops" }
+    ]
+  },
+  "process_create": {
+    "description": "Create and manage new processes",
+    "rules": [
+      { "group": "fork_ops" },
+      { "group": "clone_any" }
+    ]
+  },
+  "exec_ops": {
+    "description": "Execute programs",
+    "rules": [
+      {
+        "name": "execve",
+        "conditions": []
+      },
+      {
+        "name": "execveat",
+        "conditions": []
+      }
+    ]
+  },
+  "exit_ops": {
+    "description": "Terminate processes",
+    "rules": [
+      {
+        "name": "exit",
+        "conditions": []
+      },
+      {
+        "name": "exit_group",
+        "conditions": []
+      }
+    ]
+  },
+  "wait_ops": {
+    "description": "Wait for process state changes",
+    "rules": [
+      {
+        "name": "wait4",
+        "conditions": []
+      },
+      {
+        "name": "waitid",
+        "conditions": []
+      }
+    ]
+  },
+  "process_spawn": {
+    "description": "Spawn new processes (fork + exec pattern)",
+    "rules": [
+      { "group": "process_create" },
+      { "group": "exec_ops" },
+      { "group": "wait_ops" }
+    ]
+  },
+  "process_lifecycle": {
+    "description": "Complete process lifecycle management",
+    "rules": [
+      { "group": "process_create" },
+      { "group": "exec_ops" },
+      { "group": "exit_ops" },
+      { "group": "wait_ops" }
+    ]
+  },
+  "getpid_ops": {
+    "description": "Get process IDs",
+    "rules": [
+      {
+        "name": "getpid",
+        "conditions": []
+      },
+      {
+        "name": "getppid",
+        "conditions": []
+      },
+      {
+        "name": "gettid",
+        "conditions": []
+      }
+    ]
+  },
+  "getpgid_ops": {
+    "description": "Get process group IDs",
+    "rules": [
+      {
+        "name": "getpgid",
+        "conditions": []
+      },
+      {
+        "name": "getpgrp",
+        "conditions": []
+      }
+    ]
+  },
+  "setpgid_ops": {
+    "description": "Set process group IDs",
+    "rules": [
+      {
+        "name": "setpgid",
+        "conditions": []
+      }
+    ]
+  },
+  "getsid_ops": {
+    "description": "Get session ID",
+    "rules": [
+      {
+        "name": "getsid",
+        "conditions": []
+      }
+    ]
+  },
+  "setsid_ops": {
+    "description": "Create new session",
+    "rules": [
+      {
+        "name": "setsid",
+        "conditions": []
+      }
+    ]
+  },
+  "process_groups": {
+    "description": "Process group and session management",
+    "rules": [
+      { "group": "getpgid_ops" },
+      { "group": "setpgid_ops" },
+      { "group": "getsid_ops" },
+      { "group": "setsid_ops" }
+    ]
+  },
+  "kill_ops": {
+    "description": "Send signals to processes",
+    "rules": [
+      {
+        "name": "kill",
+        "conditions": []
+      },
+      {
+        "name": "tkill",
+        "conditions": []
+      },
+      {
+        "name": "tgkill",
+        "conditions": []
+      }
+    ]
+  },
+  "sigaction_ops": {
+    "description": "Signal handler management",
+    "rules": [
+      {
+        "name": "rt_sigaction",
+        "conditions": []
+      },
+      {
+        "name": "rt_sigprocmask",
+        "conditions": []
+      },
+      {
+        "name": "rt_sigreturn",
+        "conditions": []
+      }
+    ]
+  },
+  "sigpending_ops": {
+    "description": "Query and wait for signals",
+    "rules": [
+      {
+        "name": "rt_sigpending",
+        "conditions": []
+      },
+      {
+        "name": "rt_sigsuspend",
+        "conditions": []
+      },
+      {
+        "name": "rt_sigtimedwait",
+        "conditions": []
+      },
+      {
+        "name": "pause",
+        "conditions": []
+      }
+    ]
+  },
+  "signal_ops": {
+    "description": "All signal operations",
+    "rules": [
+      { "group": "kill_ops" },
+      { "group": "sigaction_ops" },
+      { "group": "sigpending_ops" }
+    ]
+  },
+  "getuid_ops": {
+    "description": "Get user IDs",
+    "rules": [
+      {
+        "name": "getuid",
+        "conditions": []
+      },
+      {
+        "name": "geteuid",
+        "conditions": []
+      },
+      {
+        "name": "getresuid",
+        "conditions": []
+      }
+    ]
+  },
+  "setuid_ops": {
+    "description": "Set user IDs",
+    "rules": [
+      {
+        "name": "setuid",
+        "conditions": []
+      },
+      {
+        "name": "seteuid",
+        "conditions": []
+      },
+      {
+        "name": "setreuid",
+        "conditions": []
+      },
+      {
+        "name": "setresuid",
+        "conditions": []
+      },
+      {
+        "name": "setfsuid",
+        "conditions": []
+      }
+    ]
+  },
+  "getgid_ops": {
+    "description": "Get group IDs",
+    "rules": [
+      {
+        "name": "getgid",
+        "conditions": []
+      },
+      {
+        "name": "getegid",
+        "conditions": []
+      },
+      {
+        "name": "getresgid",
+        "conditions": []
+      },
+      {
+        "name": "getgroups",
+        "conditions": []
+      }
+    ]
+  },
+  "setgid_ops": {
+    "description": "Set group IDs",
+    "rules": [
+      {
+        "name": "setgid",
+        "conditions": []
+      },
+      {
+        "name": "setegid",
+        "conditions": []
+      },
+      {
+        "name": "setregid",
+        "conditions": []
+      },
+      {
+        "name": "setresgid",
+        "conditions": []
+      },
+      {
+        "name": "setfsgid",
+        "conditions": []
+      },
+      {
+        "name": "setgroups",
+        "conditions": []
+      }
+    ]
+  },
+  "credentials_get": {
+    "description": "Get all credential information",
+    "rules": [
+      { "group": "getuid_ops" },
+      { "group": "getgid_ops" },
+      { "group": "getpid_ops" }
+    ]
+  },
+  "credentials_set": {
+    "description": "Set credential information",
+    "rules": [
+      { "group": "setuid_ops" },
+      { "group": "setgid_ops" }
+    ]
+  },
+  "socket_inet": {
+    "description": "Create Internet sockets (AF_INET, AF_INET6)",
+    "rules": [
+      {
+        "name": "socket",
+        "conditions": [
+          {
+            "type": "equals",
+            "argument": "domain",
+            "value": "AF_INET"
+          }
+        ]
+      },
+      {
+        "name": "socket",
+        "conditions": [
+          {
+            "type": "equals",
+            "argument": "domain",
+            "value": "AF_INET6"
+          }
+        ]
+      }
+    ]
+  },
+  "socket_unix": {
+    "description": "Create Unix domain sockets (AF_UNIX)",
+    "rules": [
+      {
+        "name": "socket",
+        "conditions": [
+          {
+            "type": "equals",
+            "argument": "domain",
+            "value": "AF_UNIX"
+          }
+        ]
+      }
+    ]
+  },
+  "socket_netlink": {
+    "description": "Create Netlink sockets (AF_NETLINK)",
+    "rules": [
+      {
+        "name": "socket",
+        "conditions": [
+          {
+            "type": "equals",
+            "argument": "domain",
+            "value": "AF_NETLINK"
+          }
+        ]
+      }
+    ]
+  },
+  "socket_any": {
+    "description": "Create sockets of any domain",
+    "rules": [
+      {
+        "name": "socket",
+        "conditions": []
+      },
+      {
+        "name": "socketpair",
+        "conditions": []
+      }
+    ]
+  },
+  "bind_ops": {
+    "description": "Bind sockets to addresses",
+    "rules": [
+      {
+        "name": "bind",
+        "conditions": []
+      }
+    ]
+  },
+  "listen_ops": {
+    "description": "Listen for connections",
+    "rules": [
+      {
+        "name": "listen",
+        "conditions": []
+      }
+    ]
+  },
+  "accept_ops": {
+    "description": "Accept incoming connections",
+    "rules": [
+      {
+        "name": "accept",
+        "conditions": []
+      },
+      {
+        "name": "accept4",
+        "conditions": []
+      }
+    ]
+  },
+  "connect_ops": {
+    "description": "Connect to remote addresses",
+    "rules": [
+      {
+        "name": "connect",
+        "conditions": []
+      }
+    ]
+  },
+  "send_ops": {
+    "description": "Send data over sockets",
+    "rules": [
+      {
+        "name": "sendto",
+        "conditions": []
+      },
+      {
+        "name": "sendmsg",
+        "conditions": []
+      },
+      {
+        "name": "sendmmsg",
+        "conditions": []
+      }
+    ]
+  },
+  "recv_ops": {
+    "description": "Receive data from sockets",
+    "rules": [
+      {
+        "name": "recvfrom",
+        "conditions": []
+      },
+      {
+        "name": "recvmsg",
+        "conditions": []
+      },
+      {
+        "name": "recvmmsg",
+        "conditions": []
+      }
+    ]
+  },
+  "sockopt_ops": {
+    "description": "Socket option operations",
+    "rules": [
+      {
+        "name": "getsockopt",
+        "conditions": []
+      },
+      {
+        "name": "setsockopt",
+        "conditions": []
+      },
+      {
+        "name": "getsockname",
+        "conditions": []
+      },
+      {
+        "name": "getpeername",
+        "conditions": []
+      }
+    ]
+  },
+  "shutdown_ops": {
+    "description": "Shutdown socket connections",
+    "rules": [
+      {
+        "name": "shutdown",
+        "conditions": []
+      }
+    ]
+  },
+  "socket_server": {
+    "description": "Server-side socket operations (bind, listen, accept)",
+    "rules": [
+      { "group": "socket_any" },
+      { "group": "bind_ops" },
+      { "group": "listen_ops" },
+      { "group": "accept_ops" },
+      { "group": "sockopt_ops" }
+    ]
+  },
+  "socket_client": {
+    "description": "Client-side socket operations (connect)",
+    "rules": [
+      { "group": "socket_any" },
+      { "group": "connect_ops" },
+      { "group": "sockopt_ops" }
+    ]
+  },
+  "socket_io": {
+    "description": "Socket I/O operations (send and receive)",
+    "rules": [
+      { "group": "send_ops" },
+      { "group": "recv_ops" },
+      { "group": "read_ops" },
+      { "group": "write_ops" },
+      { "group": "close_ops" }
+    ]
+  },
+  "network_client": {
+    "description": "Network client operations (connect, send, receive)",
+    "rules": [
+      { "group": "socket_client" },
+      { "group": "socket_io" },
+      { "group": "shutdown_ops" }
+    ]
+  },
+  "network_server": {
+    "description": "Network server operations (bind, listen, accept, I/O)",
+    "rules": [
+      { "group": "socket_server" },
+      { "group": "socket_io" },
+      { "group": "shutdown_ops" }
+    ]
+  },
+  "network_full": {
+    "description": "Complete network access (client and server)",
+    "rules": [
+      { "group": "network_client" },
+      { "group": "network_server" }
+    ]
+  },
+  "mmap_create": {
+    "description": "Create memory mappings",
+    "rules": [
+      {
+        "name": "mmap",
+        "conditions": []
+      }
+    ]
+  },
+  "mmap_remap": {
+    "description": "Remap memory mappings",
+    "rules": [
+      {
+        "name": "mremap",
+        "conditions": []
+      }
+    ]
+  },
+  "mmap_destroy": {
+    "description": "Destroy memory mappings",
+    "rules": [
+      {
+        "name": "munmap",
+        "conditions": []
+      }
+    ]
+  },
+  "mmap_protect": {
+    "description": "Change memory protection",
+    "rules": [
+      {
+        "name": "mprotect",
+        "conditions": []
+      },
+      {
+        "name": "pkey_mprotect",
+        "conditions": []
+      }
+    ]
+  },
+  "mmap_sync": {
+    "description": "Synchronize memory mappings",
+    "rules": [
+      {
+        "name": "msync",
+        "conditions": []
+      }
+    ]
+  },
+  "mmap_advise": {
+    "description": "Give advice about memory usage",
+    "rules": [
+      {
+        "name": "madvise",
+        "conditions": []
+      }
+    ]
+  },
+  "mmap_lock": {
+    "description": "Lock memory pages",
+    "rules": [
+      {
+        "name": "mlock",
+        "conditions": []
+      },
+      {
+        "name": "mlock2",
+        "conditions": []
+      },
+      {
+        "name": "munlock",
+        "conditions": []
+      },
+      {
+        "name": "mlockall",
+        "conditions": []
+      },
+      {
+        "name": "munlockall",
+        "conditions": []
+      }
+    ]
+  },
+  "mmap_ops": {
+    "description": "Memory mapping operations",
+    "rules": [
+      { "group": "mmap_create" },
+      { "group": "mmap_remap" },
+      { "group": "mmap_destroy" },
+      { "group": "mmap_protect" },
+      { "group": "mmap_sync" },
+      { "group": "mmap_advise" },
+      { "group": "mmap_lock" }
+    ]
+  },
+  "brk_ops": {
+    "description": "Heap memory management",
+    "rules": [
+      {
+        "name": "brk",
+        "conditions": []
+      }
+    ]
+  },
+  "memory_allocate": {
+    "description": "Memory allocation operations (mmap, brk)",
+    "rules": [
+      { "group": "mmap_create" },
+      { "group": "mmap_remap" },
+      { "group": "brk_ops" }
+    ]
+  },
+  "memory_management": {
+    "description": "Complete memory management",
+    "rules": [
+      { "group": "mmap_ops" },
+      { "group": "brk_ops" }
+    ]
+  },
+  "time_get": {
+    "description": "Get current time",
+    "rules": [
+      {
+        "name": "time",
+        "conditions": []
+      },
+      {
+        "name": "gettimeofday",
+        "conditions": []
+      },
+      {
+        "name": "clock_gettime",
+        "conditions": []
+      },
+      {
+        "name": "clock_getres",
+        "conditions": []
+      }
+    ]
+  },
+  "time_set": {
+    "description": "Set system time (privileged)",
+    "rules": [
+      {
+        "name": "settimeofday",
+        "conditions": []
+      },
+      {
+        "name": "clock_settime",
+        "conditions": []
+      }
+    ]
+  },
+  "sleep_ops": {
+    "description": "Sleep operations",
+    "rules": [
+      {
+        "name": "nanosleep",
+        "conditions": []
+      },
+      {
+        "name": "clock_nanosleep",
+        "conditions": []
+      }
+    ]
+  },
+  "timer_ops": {
+    "description": "Timer operations",
+    "rules": [
+      {
+        "name": "timer_create",
+        "conditions": []
+      },
+      {
+        "name": "timer_settime",
+        "conditions": []
+      },
+      {
+        "name": "timer_gettime",
+        "conditions": []
+      },
+      {
+        "name": "timer_getoverrun",
+        "conditions": []
+      },
+      {
+        "name": "timer_delete",
+        "conditions": []
+      }
+    ]
+  },
+  "alarm_ops": {
+    "description": "Alarm operations",
+    "rules": [
+      {
+        "name": "alarm",
+        "conditions": []
+      },
+      {
+        "name": "getitimer",
+        "conditions": []
+      },
+      {
+        "name": "setitimer",
+        "conditions": []
+      }
+    ]
+  },
+  "time_ops": {
+    "description": "Time and timer operations",
+    "rules": [
+      { "group": "time_get" },
+      { "group": "sleep_ops" },
+      { "group": "timer_ops" },
+      { "group": "alarm_ops" }
+    ]
+  },
+  "poll_ops": {
+    "description": "Poll for I/O events",
+    "rules": [
+      {
+        "name": "poll",
+        "conditions": []
+      },
+      {
+        "name": "ppoll",
+        "conditions": []
+      }
+    ]
+  },
+  "select_ops": {
+    "description": "Select for I/O events",
+    "rules": [
+      {
+        "name": "select",
+        "conditions": []
+      },
+      {
+        "name": "pselect6",
+        "conditions": []
+      }
+    ]
+  },
+  "epoll_ops": {
+    "description": "Epoll I/O event notification",
+    "rules": [
+      {
+        "name": "epoll_create",
+        "conditions": []
+      },
+      {
+        "name": "epoll_create1",
+        "conditions": []
+      },
+      {
+        "name": "epoll_ctl",
+        "conditions": []
+      },
+      {
+        "name": "epoll_wait",
+        "conditions": []
+      },
+      {
+        "name": "epoll_pwait",
+        "conditions": []
+      },
+      {
+        "name": "epoll_pwait2",
+        "conditions": []
+      }
+    ]
+  },
+  "io_multiplexing": {
+    "description": "I/O multiplexing (select, poll, epoll)",
+    "rules": [
+      { "group": "select_ops" },
+      { "group": "poll_ops" },
+      { "group": "epoll_ops" }
+    ]
+  },
+  "eventfd_ops": {
+    "description": "Event file descriptors",
+    "rules": [
+      {
+        "name": "eventfd",
+        "conditions": []
+      },
+      {
+        "name": "eventfd2",
+        "conditions": []
+      }
+    ]
+  },
+  "timerfd_ops": {
+    "description": "Timer file descriptors",
+    "rules": [
+      {
+        "name": "timerfd_create",
+        "conditions": []
+      },
+      {
+        "name": "timerfd_settime",
+        "conditions": []
+      },
+      {
+        "name": "timerfd_gettime",
+        "conditions": []
+      }
+    ]
+  },
+  "signalfd_ops": {
+    "description": "Signal file descriptors",
+    "rules": [
+      {
+        "name": "signalfd",
+        "conditions": []
+      },
+      {
+        "name": "signalfd4",
+        "conditions": []
+      }
+    ]
+  },
+  "special_fd": {
+    "description": "Special file descriptors (eventfd, timerfd, signalfd)",
+    "rules": [
+      { "group": "eventfd_ops" },
+      { "group": "timerfd_ops" },
+      { "group": "signalfd_ops" }
+    ]
+  },
+  "inotify_ops": {
+    "description": "Filesystem event monitoring",
+    "rules": [
+      {
+        "name": "inotify_init",
+        "conditions": []
+      },
+      {
+        "name": "inotify_init1",
+        "conditions": []
+      },
+      {
+        "name": "inotify_add_watch",
+        "conditions": []
+      },
+      {
+        "name": "inotify_rm_watch",
+        "conditions": []
+      }
+    ]
+  },
+  "fanotify_ops": {
+    "description": "Filesystem notification (advanced)",
+    "rules": [
+      {
+        "name": "fanotify_init",
+        "conditions": []
+      },
+      {
+        "name": "fanotify_mark",
+        "conditions": []
+      }
+    ]
+  },
+  "fs_notify": {
+    "description": "Filesystem notification (inotify, fanotify)",
+    "rules": [
+      { "group": "inotify_ops" },
+      { "group": "fanotify_ops" }
+    ]
+  },
+  "futex_ops": {
+    "description": "Fast userspace mutex",
+    "rules": [
+      {
+        "name": "futex",
+        "conditions": []
+      },
+      {
+        "name": "get_robust_list",
+        "conditions": []
+      },
+      {
+        "name": "set_robust_list",
+        "conditions": []
+      }
+    ]
+  },
+  "sysinfo_ops": {
+    "description": "System information",
+    "rules": [
+      {
+        "name": "uname",
+        "conditions": []
+      },
+      {
+        "name": "sysinfo",
+        "conditions": []
+      }
+    ]
+  },
+  "rlimit_get": {
+    "description": "Get resource limits",
+    "rules": [
+      {
+        "name": "getrlimit",
+        "conditions": []
+      },
+      {
+        "name": "prlimit64",
+        "conditions": []
+      }
+    ]
+  },
+  "rlimit_set": {
+    "description": "Set resource limits",
+    "rules": [
+      {
+        "name": "setrlimit",
+        "conditions": []
+      },
+      {
+        "name": "prlimit64",
+        "conditions": []
+      }
+    ]
+  },
+  "rusage_ops": {
+    "description": "Resource usage information",
+    "rules": [
+      {
+        "name": "getrusage",
+        "conditions": []
+      },
+      {
+        "name": "times",
+        "conditions": []
+      }
+    ]
+  },
+  "resource_info": {
+    "description": "Resource limit and usage information",
+    "rules": [
+      { "group": "rlimit_get" },
+      { "group": "rusage_ops" }
+    ]
+  },
+  "priority_ops": {
+    "description": "Process priority operations",
+    "rules": [
+      {
+        "name": "getpriority",
+        "conditions": []
+      },
+      {
+        "name": "setpriority",
+        "conditions": []
+      },
+      {
+        "name": "nice",
+        "conditions": []
+      }
+    ]
+  },
+  "sched_ops": {
+    "description": "Scheduler operations",
+    "rules": [
+      {
+        "name": "sched_yield",
+        "conditions": []
+      },
+      {
+        "name": "sched_getscheduler",
+        "conditions": []
+      },
+      {
+        "name": "sched_setscheduler",
+        "conditions": []
+      },
+      {
+        "name": "sched_getparam",
+        "conditions": []
+      },
+      {
+        "name": "sched_setparam",
+        "conditions": []
+      },
+      {
+        "name": "sched_get_priority_max",
+        "conditions": []
+      },
+      {
+        "name": "sched_get_priority_min",
+        "conditions": []
+      },
+      {
+        "name": "sched_rr_get_interval",
+        "conditions": []
+      }
+    ]
+  },
+  "affinity_ops": {
+    "description": "CPU affinity operations",
+    "rules": [
+      {
+        "name": "sched_getaffinity",
+        "conditions": []
+      },
+      {
+        "name": "sched_setaffinity",
+        "conditions": []
+      }
+    ]
+  },
+  "scheduling": {
+    "description": "Process scheduling and priority management",
+    "rules": [
+      { "group": "priority_ops" },
+      { "group": "sched_ops" },
+      { "group": "affinity_ops" }
+    ]
+  },
+  "prctl_ops": {
+    "description": "Process control operations",
+    "rules": [
+      {
+        "name": "prctl",
+        "conditions": []
+      },
+      {
+        "name": "arch_prctl",
+        "conditions": []
+      }
+    ]
+  },
+  "capget_ops": {
+    "description": "Get capabilities",
+    "rules": [
+      {
+        "name": "capget",
+        "conditions": []
+      }
+    ]
+  },
+  "capset_ops": {
+    "description": "Set capabilities",
+    "rules": [
+      {
+        "name": "capset",
+        "conditions": []
+      }
+    ]
+  },
+  "umask_ops": {
+    "description": "File creation mask",
+    "rules": [
+      {
+        "name": "umask",
+        "conditions": []
+      }
+    ]
+  },
+  "chroot_ops": {
+    "description": "Change root directory",
+    "rules": [
+      {
+        "name": "chroot",
+        "conditions": []
+      }
+    ]
+  },
+  "namespace_ops": {
+    "description": "Linux namespace operations",
+    "rules": [
+      {
+        "name": "unshare",
+        "conditions": []
+      },
+      {
+        "name": "setns",
+        "conditions": []
+      }
+    ]
+  },
+  "seccomp_ops": {
+    "description": "Seccomp operations",
+    "rules": [
+      {
+        "name": "seccomp",
+        "conditions": []
+      }
+    ]
+  },
+  "bpf_ops": {
+    "description": "BPF operations",
+    "rules": [
+      {
+        "name": "bpf",
+        "conditions": []
+      }
+    ]
+  },
+  "landlock_ops": {
+    "description": "Landlock security operations",
+    "rules": [
+      {
+        "name": "landlock_create_ruleset",
+        "conditions": []
+      },
+      {
+        "name": "landlock_add_rule",
+        "conditions": []
+      },
+      {
+        "name": "landlock_restrict_self",
+        "conditions": []
+      }
+    ]
+  },
+  "security_ops": {
+    "description": "Security-related operations",
+    "rules": [
+      { "group": "capget_ops" },
+      { "group": "capset_ops" },
+      { "group": "seccomp_ops" },
+      { "group": "landlock_ops" }
+    ]
+  },
+  "basic_app": {
+    "description": "Basic application needs (file I/O, memory, time, exit)",
+    "rules": [
+      { "group": "filesystem_readonly" },
+      { "group": "memory_allocate" },
+      { "group": "time_get" },
+      { "group": "exit_ops" },
+      { "group": "credentials_get" },
+      { "group": "sysinfo_ops" }
+    ]
+  },
+  "stdio_app": {
+    "description": "Application with stdin/stdout/stderr",
+    "rules": [
+      {
+        "name": "read",
+        "conditions": [
+          {
+            "type": "equals",
+            "argument": "fd",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "write",
+        "conditions": [
+          {
+            "type": "equals",
+            "argument": "fd",
+            "value": "1"
+          }
+        ]
+      },
+      {
+        "name": "write",
+        "conditions": [
+          {
+            "type": "equals",
+            "argument": "fd",
+            "value": "2"
+          }
+        ]
+      },
+      { "group": "close_ops" },
+      { "group": "memory_allocate" },
+      { "group": "exit_ops" }
+    ]
+  },
+  "file_processor": {
+    "description": "Application that processes files (read, write, seek)",
+    "rules": [
+      { "group": "file_basic" },
+      { "group": "memory_allocate" },
+      { "group": "time_get" },
+      { "group": "exit_ops" }
+    ]
+  },
+  "network_app": {
+    "description": "Network application (sockets, I/O)",
+    "rules": [
+      { "group": "network_full" },
+      { "group": "memory_allocate" },
+      { "group": "time_ops" },
+      { "group": "exit_ops" },
+      { "group": "signal_ops" }
+    ]
+  },
+  "daemon": {
+    "description": "System daemon (fork, setsid, signals, network)",
+    "rules": [
+      { "group": "process_create" },
+      { "group": "setsid_ops" },
+      { "group": "signal_ops" },
+      { "group": "network_server" },
+      { "group": "filesystem_full" },
+      { "group": "memory_management" },
+      { "group": "time_ops" },
+      { "group": "exit_ops" }
+    ]
+  },
+  "shell": {
+    "description": "Shell or process launcher",
+    "rules": [
+      { "group": "process_lifecycle" },
+      { "group": "filesystem_full" },
+      { "group": "pipe_ops" },
+      { "group": "dup_ops" },
+      { "group": "signal_ops" },
+      { "group": "credentials_get" },
+      { "group": "memory_management" }
+    ]
+  },
+  "container_runtime": {
+    "description": "Container runtime operations",
+    "rules": [
+      { "group": "process_lifecycle" },
+      { "group": "namespace_ops" },
+      { "group": "chroot_ops" },
+      { "group": "filesystem_full" },
+      { "group": "network_full" },
+      { "group": "credentials_set" },
+      { "group": "memory_management" },
+      { "group": "security_ops" }
+    ]
+  }
+}

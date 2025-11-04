@@ -12,7 +12,7 @@
             "action": "SCMP_ACT_LOG"
         }
     ],
-    "abstract_syscalls": [
+    "abstractSyscalls": [
         {
             "names": [
                 "WriteOpen"
