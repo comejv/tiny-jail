@@ -104,7 +104,7 @@ pub fn load_profile(
         debug!("Parsing OCI profile: {}", path);
         match fs::read_to_string(path) {
             Ok(profile_content) => match serde_json::from_str(&profile_content) {
-                Ok(oci_seccomp) => apply_oci_profile(
+                Ok(oci_seccomp) => apply_profile(
                     oci_seccomp,
                     default_action_override,
                     default_errno_ret_override,
@@ -128,7 +128,6 @@ pub fn load_profile(
         ScmpFilterContext::new(Action::Allow.to_scmp_action(None)?)?
     };
 
-    debug!("kill_syscalls has {} entries", kill_syscalls.len());
     if !kill_syscalls.is_empty() {
         apply_kill_overrides(&mut ctx, kill_syscalls)?;
     }
@@ -143,20 +142,21 @@ pub fn load_profile(
 // Profile Application
 // ============================================================================
 
-fn apply_oci_profile(
+fn apply_profile(
     oci_seccomp: OciSeccomp,
     default_action_override: Option<Action>,
     default_errno_ret_override: Option<u32>,
     log_allowed: bool,
 ) -> Result<ScmpFilterContext, ProfileError> {
     let default_errno_ret = default_errno_ret_override.or(oci_seccomp.default_errno_ret);
-    let default_action = if log_allowed {
+    let default_action = if log_allowed && oci_seccomp.default_action == Action::Allow {
         Action::Log.to_scmp_action(None)?
     } else {
         default_action_override
             .unwrap_or(oci_seccomp.default_action)
             .to_scmp_action(default_errno_ret)?
     };
+    debug!("default_action={:?}", default_action);
 
     let mut ctx = ScmpFilterContext::new(default_action).map_err(|e| {
         error!(
@@ -168,6 +168,8 @@ fn apply_oci_profile(
 
     add_architectures(&mut ctx, &oci_seccomp.architectures)?;
     apply_syscall_rules(&mut ctx, oci_seccomp.syscalls, log_allowed)?;
+
+    // TODO: Apply abstract syscalls
 
     Ok(ctx)
 }
@@ -197,7 +199,6 @@ fn apply_syscall_rules(
     match syscalls {
         Some(syscalls) => {
             for syscall_entry in syscalls {
-                debug!("Processing syscall: {}", syscall_entry.names.join(","));
                 apply_syscall_rule(ctx, &syscall_entry, log_allowed)?;
             }
             Ok(())
@@ -236,50 +237,54 @@ fn apply_syscall_rule(
 
     let scmp_action = action.to_scmp_action(syscall_entry.errno_ret)?;
 
-    for syscall_name in &syscall_entry.names {
-        add_rule_for_syscall(ctx, syscall_name, scmp_action, &syscall_entry.args)?;
-    }
-
-    Ok(())
-}
-
-fn add_rule_for_syscall(
-    ctx: &mut ScmpFilterContext,
-    syscall_name: &str,
-    scmp_action: ScmpAction,
-    args: &[OciSyscallArg],
-) -> Result<(), ProfileError> {
-    let syscall = ScmpSyscall::from_name(syscall_name).map_err(|_| {
-        error!("Unknown syscall: {}", syscall_name);
-        ProfileError::UnknownSyscall(syscall_name.to_string())
-    })?;
-
     let default_action = ctx.get_act_default().unwrap_or(ScmpAction::Allow);
 
     if scmp_action == default_action {
-        warn!("Ignoring syscall rule for default action: {}", syscall_name);
+        warn!(
+            "Ignoring syscall rule matching default action for: {:?}",
+            syscall_entry.names
+        );
+        debug!(
+            "rule action={:?}, default_action={:?}",
+            scmp_action, default_action
+        );
         return Ok(());
     }
 
-    if args.is_empty() {
-        debug!(
-            "Adding unconditional rule: action={:?}, syscall={}",
-            scmp_action, syscall_name
-        );
-        ctx.add_rule(scmp_action, syscall)
+    let args_is_empty = syscall_entry.args.is_empty();
+
+    let comparators: Vec<ScmpArgCompare> = if args_is_empty {
+        vec![]
     } else {
-        let comparators = build_comparators(args)?;
-        debug!(
-            "Adding conditional rule: action={:?}, syscall={}",
-            scmp_action, syscall_name
-        );
-        ctx.add_rule_conditional(scmp_action, syscall, &comparators)
+        build_comparators(&syscall_entry.args)?
+    };
+
+    debug!(
+        "Adding rule {:?} for syscalls: {:?}",
+        scmp_action, syscall_entry.names
+    );
+
+    for syscall_name in &syscall_entry.names {
+        let syscall = ScmpSyscall::from_name(syscall_name).map_err(|_| {
+            error!("Unknown syscall: {}", syscall_name);
+            ProfileError::UnknownSyscall(syscall_name.to_string())
+        })?;
+
+        if args_is_empty {
+            ctx.add_rule(scmp_action, syscall)
+        } else {
+            debug!("With condition {:?}", comparators);
+            ctx.add_rule_conditional(scmp_action, syscall, &comparators)
+        }
+        .map(|_| ())
+        .map_err(|e| {
+            error!("Failed to add rule for {}: {}", syscall_name, e);
+            ProfileError::LibSeccomp(e)
+        })
+        .unwrap();
     }
-    .map(|_| ())
-    .map_err(|e| {
-        error!("Failed to add rule for {}: {}", syscall_name, e);
-        ProfileError::LibSeccomp(e)
-    })
+
+    Ok(())
 }
 
 // ============================================================================
