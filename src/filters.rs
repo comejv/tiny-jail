@@ -720,3 +720,481 @@ fn parse_value(value_str: &str) -> Result<u64, ProfileError> {
 // ============================================================================
 // Tests
 // ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========================================================================
+    // Parse Value Tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_value_decimal() {
+        assert_eq!(parse_value("42").unwrap(), 42);
+        assert_eq!(parse_value("0").unwrap(), 0);
+        assert_eq!(parse_value("65536").unwrap(), 65536);
+    }
+
+    #[test]
+    fn test_parse_value_hex() {
+        assert_eq!(parse_value("0x10").unwrap(), 16);
+        assert_eq!(parse_value("0xFF").unwrap(), 255);
+        assert_eq!(parse_value("0x0").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_parse_value_named_constants() {
+        assert_eq!(parse_value("AF_UNIX").unwrap(), 1);
+        assert_eq!(parse_value("AF_INET").unwrap(), 2);
+        assert_eq!(parse_value("AF_INET6").unwrap(), 10);
+        assert_eq!(parse_value("AF_NETLINK").unwrap(), 16);
+    }
+
+    #[test]
+    fn test_parse_value_invalid() {
+        assert!(parse_value("invalid").is_err());
+        assert!(parse_value("0xZZZ").is_err());
+    }
+
+    // ========================================================================
+    // Parse Flags Tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_flags_single() {
+        assert_eq!(parse_flags("O_WRONLY").unwrap(), 0o1);
+        assert_eq!(parse_flags("O_RDWR").unwrap(), 0o2);
+        assert_eq!(parse_flags("O_CREAT").unwrap(), 0o100);
+    }
+
+    #[test]
+    fn test_parse_flags_multiple() {
+        let result = parse_flags("O_WRONLY|O_CREAT").unwrap();
+        assert_eq!(result, 0o1 | 0o100);
+
+        let result = parse_flags("O_RDWR|O_CREAT|O_TRUNC").unwrap();
+        assert_eq!(result, 0o2 | 0o100 | 0o1000);
+    }
+
+    #[test]
+    fn test_parse_flags_with_whitespace() {
+        let result = parse_flags("O_WRONLY | O_CREAT | O_TRUNC").unwrap();
+        assert_eq!(result, 0o1 | 0o100 | 0o1000);
+    }
+
+    #[test]
+    fn test_parse_flags_clone_flags() {
+        assert_eq!(parse_flags("CLONE_THREAD").unwrap(), 0x00010000);
+        assert_eq!(parse_flags("CLONE_VM").unwrap(), 0x00000100);
+        let result = parse_flags("CLONE_THREAD|CLONE_VM").unwrap();
+        assert_eq!(result, 0x00010000 | 0x00000100);
+    }
+
+    #[test]
+    fn test_parse_flags_socket_domains() {
+        assert_eq!(parse_flags("AF_UNIX").unwrap(), 1);
+        assert_eq!(parse_flags("AF_INET").unwrap(), 2);
+        assert_eq!(parse_flags("AF_INET6").unwrap(), 10);
+    }
+
+    #[test]
+    fn test_parse_flags_unknown_flag_warning() {
+        // Unknown flags are silently ignored with a warning
+        let result = parse_flags("O_WRONLY|UNKNOWN_FLAG|O_CREAT").unwrap();
+        assert_eq!(result, 0o1 | 0o100);
+    }
+
+    // ========================================================================
+    // Get Argument Index Tests
+    // ========================================================================
+
+    #[test]
+    fn test_get_argument_index_flags() {
+        assert_eq!(get_argument_index("flags", "open").unwrap(), 1);
+        assert_eq!(get_argument_index("flags", "openat").unwrap(), 2);
+        assert_eq!(get_argument_index("flags", "other").unwrap(), 1);
+    }
+
+    #[test]
+    fn test_get_argument_index_standard_args() {
+        assert_eq!(get_argument_index("mode", "open").unwrap(), 2);
+        assert_eq!(get_argument_index("fd", "write").unwrap(), 0);
+        assert_eq!(get_argument_index("domain", "socket").unwrap(), 0);
+        assert_eq!(get_argument_index("type", "socket").unwrap(), 1);
+    }
+
+    #[test]
+    fn test_get_argument_index_uid_gid() {
+        assert_eq!(get_argument_index("ruid", "setresuid").unwrap(), 0);
+        assert_eq!(get_argument_index("euid", "setresuid").unwrap(), 1);
+        assert_eq!(get_argument_index("suid", "setresuid").unwrap(), 2);
+        assert_eq!(get_argument_index("rgid", "setresgid").unwrap(), 0);
+        assert_eq!(get_argument_index("egid", "setresgid").unwrap(), 1);
+        assert_eq!(get_argument_index("sgid", "setresgid").unwrap(), 2);
+    }
+
+    #[test]
+    fn test_get_argument_index_unknown() {
+        assert!(get_argument_index("unknown_arg", "open").is_err());
+    }
+
+    // ========================================================================
+    // Parse Compare Op Tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_compare_op_all_operators() {
+        assert_eq!(
+            parse_compare_op("SCMP_CMP_NE").unwrap(),
+            ScmpCompareOp::NotEqual
+        );
+        assert_eq!(
+            parse_compare_op("SCMP_CMP_LT").unwrap(),
+            ScmpCompareOp::Less
+        );
+        assert_eq!(
+            parse_compare_op("SCMP_CMP_LE").unwrap(),
+            ScmpCompareOp::LessOrEqual
+        );
+        assert_eq!(
+            parse_compare_op("SCMP_CMP_EQ").unwrap(),
+            ScmpCompareOp::Equal
+        );
+        assert_eq!(
+            parse_compare_op("SCMP_CMP_GE").unwrap(),
+            ScmpCompareOp::GreaterEqual
+        );
+        assert_eq!(
+            parse_compare_op("SCMP_CMP_GT").unwrap(),
+            ScmpCompareOp::Greater
+        );
+    }
+
+    #[test]
+    fn test_parse_compare_op_invalid() {
+        assert!(parse_compare_op("SCMP_CMP_INVALID").is_err());
+    }
+
+    // ========================================================================
+    // Resolve Action Tests
+    // ========================================================================
+
+    #[test]
+    fn test_resolve_action_allow_with_log() {
+        let action = resolve_action(Action::Allow, true);
+        assert_eq!(action, Action::Log);
+    }
+
+    #[test]
+    fn test_resolve_action_allow_without_log() {
+        let action = resolve_action(Action::Allow, false);
+        assert_eq!(action, Action::Allow);
+    }
+
+    #[test]
+    fn test_resolve_action_other_actions() {
+        assert_eq!(resolve_action(Action::KillThread, true), Action::KillThread);
+        assert_eq!(
+            resolve_action(Action::KillThread, false),
+            Action::KillThread
+        );
+        assert_eq!(resolve_action(Action::Log, true), Action::Log);
+        assert_eq!(resolve_action(Action::Log, false), Action::Log);
+    }
+
+    // ========================================================================
+    // Convert Condition To OCI Tests
+    // ========================================================================
+
+    #[test]
+    fn test_convert_condition_bitmask_all() {
+        let condition = SyscallCondition {
+            type_: "bitmask_all".to_string(),
+            argument: "flags".to_string(),
+            value: None,
+            flags: Some("O_WRONLY|O_CREAT".to_string()),
+        };
+
+        let result = convert_condition_to_oci(&condition, "open").unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].op, "SCMP_CMP_MASKED_EQ");
+        assert_eq!(result[0].value, 0o1 | 0o100);
+        assert_eq!(result[0].value_two, Some(0o1 | 0o100));
+    }
+
+    #[test]
+    fn test_convert_condition_bitmask_none() {
+        let condition = SyscallCondition {
+            type_: "bitmask_none".to_string(),
+            argument: "flags".to_string(),
+            value: None,
+            flags: Some("O_CREAT|O_TRUNC".to_string()),
+        };
+
+        let result = convert_condition_to_oci(&condition, "open").unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].op, "SCMP_CMP_MASKED_EQ");
+        assert_eq!(result[0].value, 0o100 | 0o1000);
+        assert_eq!(result[0].value_two, Some(0));
+    }
+
+    #[test]
+    fn test_convert_condition_equals() {
+        let condition = SyscallCondition {
+            type_: "equals".to_string(),
+            argument: "fd".to_string(),
+            value: Some("3".to_string()),
+            flags: None,
+        };
+
+        let result = convert_condition_to_oci(&condition, "read").unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].op, "SCMP_CMP_EQ");
+        assert_eq!(result[0].value, 3);
+    }
+
+    #[test]
+    fn test_convert_condition_not_equals() {
+        let condition = SyscallCondition {
+            type_: "not_equals".to_string(),
+            argument: "fd".to_string(),
+            value: Some("0".to_string()),
+            flags: None,
+        };
+
+        let result = convert_condition_to_oci(&condition, "write").unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].op, "SCMP_CMP_NE");
+        assert_eq!(result[0].value, 0);
+    }
+
+    #[test]
+    fn test_convert_condition_greater() {
+        let condition = SyscallCondition {
+            type_: "greater".to_string(),
+            argument: "fd".to_string(),
+            value: Some("2".to_string()),
+            flags: None,
+        };
+
+        let result = convert_condition_to_oci(&condition, "close").unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].op, "SCMP_CMP_GT");
+        assert_eq!(result[0].value, 2);
+    }
+
+    #[test]
+    fn test_convert_condition_less() {
+        let condition = SyscallCondition {
+            type_: "less".to_string(),
+            argument: "fd".to_string(),
+            value: Some("1024".to_string()),
+            flags: None,
+        };
+
+        let result = convert_condition_to_oci(&condition, "dup").unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].op, "SCMP_CMP_LT");
+        assert_eq!(result[0].value, 1024);
+    }
+
+    #[test]
+    fn test_convert_condition_unknown_type() {
+        let condition = SyscallCondition {
+            type_: "unknown_type".to_string(),
+            argument: "fd".to_string(),
+            value: None,
+            flags: None,
+        };
+
+        let result = convert_condition_to_oci(&condition, "read").unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_convert_condition_missing_flags() {
+        let condition = SyscallCondition {
+            type_: "bitmask_all".to_string(),
+            argument: "flags".to_string(),
+            value: None,
+            flags: None,
+        };
+
+        assert!(convert_condition_to_oci(&condition, "open").is_err());
+    }
+
+    #[test]
+    fn test_convert_condition_missing_value() {
+        let condition = SyscallCondition {
+            type_: "equals".to_string(),
+            argument: "fd".to_string(),
+            value: None,
+            flags: None,
+        };
+
+        assert!(convert_condition_to_oci(&condition, "read").is_err());
+    }
+
+    // ========================================================================
+    // Convert Syscall Rule To OCI Tests
+    // ========================================================================
+
+    #[test]
+    fn test_convert_syscall_rule_to_oci_no_conditions() {
+        let syscall_rule = SyscallRule {
+            name: "read".to_string(),
+            conditions: vec![],
+        };
+
+        let result = convert_syscall_rule_to_oci(&syscall_rule, Action::Allow).unwrap();
+        assert_eq!(result.names, vec!["read"]);
+        assert_eq!(result.action, Action::Allow);
+        assert_eq!(result.conditions.len(), 0);
+    }
+
+    #[test]
+    fn test_convert_syscall_rule_to_oci_with_conditions() {
+        let syscall_rule = SyscallRule {
+            name: "open".to_string(),
+            conditions: vec![SyscallCondition {
+                type_: "bitmask_all".to_string(),
+                argument: "flags".to_string(),
+                value: None,
+                flags: Some("O_WRONLY".to_string()),
+            }],
+        };
+
+        let result = convert_syscall_rule_to_oci(&syscall_rule, Action::Log).unwrap();
+        assert_eq!(result.names, vec!["open"]);
+        assert_eq!(result.action, Action::Log);
+        assert_eq!(result.conditions.len(), 1);
+    }
+
+    // ========================================================================
+    // Group Expansion Tests
+    // ========================================================================
+
+    #[test]
+    fn test_expand_group_simple() {
+        let mut groups = HashMap::new();
+        groups.insert(
+            "test_group".to_string(),
+            AbstractGroupDef {
+                rules: vec![
+                    GroupRule::Syscall(SyscallRule {
+                        name: "read".to_string(),
+                        conditions: vec![],
+                    }),
+                    GroupRule::Syscall(SyscallRule {
+                        name: "write".to_string(),
+                        conditions: vec![],
+                    }),
+                ],
+            },
+        );
+
+        let mut visited = HashSet::new();
+        let result = expand_group("test_group", &groups, &mut visited).unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].name, "read");
+        assert_eq!(result[1].name, "write");
+    }
+
+    #[test]
+    fn test_expand_group_nested() {
+        let mut groups = HashMap::new();
+        groups.insert(
+            "inner_group".to_string(),
+            AbstractGroupDef {
+                rules: vec![GroupRule::Syscall(SyscallRule {
+                    name: "read".to_string(),
+                    conditions: vec![],
+                })],
+            },
+        );
+        groups.insert(
+            "outer_group".to_string(),
+            AbstractGroupDef {
+                rules: vec![
+                    GroupRule::Syscall(SyscallRule {
+                        name: "write".to_string(),
+                        conditions: vec![],
+                    }),
+                    GroupRule::GroupRef(GroupReference {
+                        group: "inner_group".to_string(),
+                    }),
+                ],
+            },
+        );
+
+        let mut visited = HashSet::new();
+        let result = expand_group("outer_group", &groups, &mut visited).unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].name, "write");
+        assert_eq!(result[1].name, "read");
+    }
+
+    #[test]
+    fn test_expand_group_unknown_group() {
+        let groups = HashMap::new();
+        let mut visited = HashSet::new();
+
+        let result = expand_group("nonexistent", &groups, &mut visited);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ProfileError::UnknownGroup(name) => assert_eq!(name, "nonexistent"),
+            _ => panic!("Expected UnknownGroup error"),
+        }
+    }
+
+    #[test]
+    fn test_expand_group_circular_reference() {
+        let mut groups = HashMap::new();
+        groups.insert(
+            "group_a".to_string(),
+            AbstractGroupDef {
+                rules: vec![GroupRule::GroupRef(GroupReference {
+                    group: "group_b".to_string(),
+                })],
+            },
+        );
+        groups.insert(
+            "group_b".to_string(),
+            AbstractGroupDef {
+                rules: vec![GroupRule::GroupRef(GroupReference {
+                    group: "group_a".to_string(),
+                })],
+            },
+        );
+
+        let mut visited = HashSet::new();
+        let result = expand_group("group_a", &groups, &mut visited);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ProfileError::CircularReference(_) => (),
+            _ => panic!("Expected CircularReference error"),
+        }
+    }
+
+    #[test]
+    fn test_expand_group_self_reference() {
+        let mut groups = HashMap::new();
+        groups.insert(
+            "self_ref".to_string(),
+            AbstractGroupDef {
+                rules: vec![GroupRule::GroupRef(GroupReference {
+                    group: "self_ref".to_string(),
+                })],
+            },
+        );
+
+        let mut visited = HashSet::new();
+        let result = expand_group("self_ref", &groups, &mut visited);
+
+        assert!(result.is_err());
+    }
+}
