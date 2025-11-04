@@ -10,7 +10,7 @@ The tool is conceptually inspired by the `seccomp` capabilities of projects like
 * [x] Give means to apply the policy to a target program.
 * [x] Let user specify additional actions on command-line.
 * [x] Handle log action and show logs in the output.
-* [-] Handle abstract syscall groups in the policy.
+* [x] Handle abstract syscall groups in the policy.
 * [ ] Fuzzer-Based Dynamic Generation.
 
 See [notes/goals.md](notes/goals.md) for more details.
@@ -30,12 +30,6 @@ Policies will allow users to specify a required `defaultAction` and specific act
 *   **`SCMP_ACT_KILL_THREAD`** (terminate the thread).
 *   **`SCMP_ACT_ERRNO`** (return a specific error code, e.g., `EPERM`).
 *   **`SCMP_ACT_NOTIFY`** (send the process state to a userspace agent for dynamic handling).
-
-## Advanced Security Features
-
-### 1. Syscall Argument Filtering
-
-The project targets true Least Privilege compliance by moving beyond simple syscall ID filtering. The dynamic analysis will capture and analyze the concrete argument values passed in CPU registers for critical syscalls (e.g., `openat`, `mmap`). This data is used to generate **highly granular BPF rules** that check register contents using comparison operators (`SCMP_CMP_EQ`, `SCMP_CMP_MASKED_EQ`, etc.), ensuring, for example, that a file operation is only permitted with specific flags or on designated paths.
 
 ---
 **External References:**

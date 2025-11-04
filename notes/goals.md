@@ -29,14 +29,14 @@ The project will be aimed at **X86_64 Linux systems** and tested on CachyOS.
 
 ### Additional Features
 
-- [ ] Handling of **abstract syscall groups** in the policy.
+- [x] Handling of **abstract syscall groups** in the policy.
 - [ ] Implementing a **Hybrid Coverage-Guided Policy Generation** system which includes:
     - [ ] **Static Pre-Analysis** to establish a secure, restrictive baseline (Deny-by-Default posture).
     - [ ] **Coverage-Guided Fuzzing Refinement** to maximize execution path coverage and iteratively update the policy -> libAfl.
     - [ ] **Fuzzing Refinement Loop** using the loaded BPF filter to detect crashes/trace events (SECCOMP_RET_KILL) caused by undiscovered syscalls.
 - [ ] Providing a TUI to configure the sandboxing rules and generating the configuration file (outputting OCI-compliant JSON).
 - [x] Logging of the system calls, possibly by using the `SCMP_ACT_LOG` action.
-- [ ] Implementing **Syscall Argument Filtering** to achieve true Least Privilege compliance by generating complex BPF rules that check register values (arguments).
+- [x] Implementing **Syscall Argument Filtering** to achieve true Least Privilege compliance by generating complex BPF rules that check register values (arguments).
 - [ ] Exposing an API to allow for another instance of tiny-jail to monitor the first instance and dynamically update the BPF filter (through `SCMP_ACT_NOTIFY`, asking notify daemon what should be done about a new syscall).
 - [ ] Show “which syscalls seen / which missed”, timeline view, --explain SYS_open to show call sites if available.
 
