@@ -1,10 +1,11 @@
 use clap::{ArgAction, Args, Parser, Subcommand};
-use log2::*;
+use log2::{debug, error, info};
 use thiserror::Error;
 
 use tiny_jail::actions::Action;
 use tiny_jail::commands::{filtered_exec, fuzz_exec, CommandError};
 use tiny_jail::filters::{load_profile, ProfileError};
+use tiny_jail::tui::TuiError;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -12,6 +13,8 @@ pub enum AppError {
     Profile(#[from] ProfileError),
     #[error("Command execution failed: {0}")]
     Command(#[from] CommandError),
+    #[error("TUI error: {0}")]
+    Tui(#[from] TuiError),
     #[error("{0}")]
     Message(String),
 }
@@ -44,7 +47,13 @@ enum Commands {
     ///
     /// This is the default mode if no other subcommand is specified.
     Exec(ExecArgs),
+
+    /// Explore abstract syscalls in a TUI.
+    Explore(ExploreArgs),
 }
+
+#[derive(Args, Debug)]
+struct ExploreArgs {}
 
 #[derive(Args, Debug)]
 struct FuzzArgs {
@@ -178,6 +187,9 @@ fn run() -> Result<(), AppError> {
             debug!("Command: {:?}", fuzz_args.exec);
             fuzz_exec(fuzz_args.exec, cli.env)?;
             info!("Fuzzing finished.");
+        }
+        Commands::Explore(_explore_args) => {
+            tiny_jail::tui::run_tui()?;
         }
     }
 

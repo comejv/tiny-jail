@@ -45,36 +45,36 @@ pub enum ProfileError {
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
-enum GroupRule {
+pub enum GroupRule {
     Syscall(SyscallRule),
     GroupRef(GroupReference),
 }
 
 #[derive(Deserialize, Debug, Clone)]
-struct SyscallRule {
-    name: String,
+pub struct SyscallRule {
+    pub name: String,
     #[serde(default)]
-    conditions: Vec<SyscallCondition>,
+    pub conditions: Vec<SyscallCondition>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
-struct GroupReference {
-    group: String,
+pub struct GroupReference {
+    pub group: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
-struct SyscallCondition {
+pub struct SyscallCondition {
     #[serde(rename = "type")]
-    type_: String,
-    argument: String,
-    value: Option<String>,
-    flags: Option<String>,
+    pub type_: String,
+    pub argument: String,
+    pub value: Option<String>,
+    pub flags: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
-struct AbstractGroupDef {
+pub struct AbstractGroupDef {
     #[serde(default)]
-    rules: Vec<GroupRule>,
+    pub rules: Vec<GroupRule>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -238,6 +238,21 @@ fn add_architectures(
     Ok(())
 }
 
+pub fn load_abstract_groups() -> Result<HashMap<String, AbstractGroupDef>, ProfileError> {
+    let abstract_groups_path = std::path::Path::new("data/abstract_rules.json");
+    let abstract_groups = serde_json::from_str::<AbstractGroups>(
+        &fs::read_to_string(abstract_groups_path).map_err(|e| {
+            error!("Failed to read abstract rules: {}", e);
+            ProfileError::FileRead(e)
+        })?,
+    )
+    .map_err(|e| {
+        error!("Failed to parse abstract rules: {}", e);
+        ProfileError::OciParse(e)
+    })?;
+    Ok(abstract_groups.groups)
+}
+
 fn apply_syscall_rules(
     ctx: &mut ScmpFilterContext,
     raw_profile: OciSeccomp,
@@ -259,23 +274,13 @@ fn apply_syscall_rules(
     }
 
     if let Some(abstract_syscalls) = abstract_syscalls {
-        let abstract_groups_path = std::path::Path::new("data/abstract_rules.json");
-        let abstract_groups = serde_json::from_str::<AbstractGroups>(
-            &fs::read_to_string(abstract_groups_path).map_err(|e| {
-                error!("Failed to read abstract rules: {}", e);
-                ProfileError::FileRead(e)
-            })?,
-        )
-        .map_err(|e| {
-            error!("Failed to parse abstract rules: {}", e);
-            ProfileError::OciParse(e)
-        })?;
+        let abstract_groups = load_abstract_groups()?;
 
         for abstract_entry in abstract_syscalls {
             for group_name in &abstract_entry.names {
                 debug!("Expanding abstract group: {}", group_name);
                 let expanded_rules =
-                    expand_group(group_name, &abstract_groups.groups, &mut HashSet::new())?;
+                    expand_group(group_name, &abstract_groups, &mut HashSet::new())?;
 
                 for syscall_rule in expanded_rules {
                     let oci_syscall =
