@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::str::FromStr;
 use thiserror::Error;
+use toml;
 
 use crate::actions::{Action, ActionError};
 
@@ -19,8 +20,10 @@ use crate::actions::{Action, ActionError};
 pub enum ProfileError {
     #[error("Could not read profile file: {0}")]
     FileRead(#[from] std::io::Error),
-    #[error("Could not parse OCI profile: {0}")]
-    OciParse(#[from] serde_json::Error),
+    #[error("Could not parse profile: {0}")]
+    ProfileParse(#[from] toml::de::Error),
+    #[error("Could not parse abstract rules: {0}")]
+    AbstractParse(#[from] serde_json::Error),
     #[error("Unknown syscall name: {0}")]
     UnknownSyscall(String),
     #[error("Architecture conversion error: {0}")]
@@ -84,11 +87,10 @@ struct AbstractGroups {
 }
 
 // ============================================================================
-// OCI Profile Structures
+// Profile Structures
 // ============================================================================
 
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
 struct OciSyscallCondition {
     index: u8,
     value: u64,
@@ -97,7 +99,6 @@ struct OciSyscallCondition {
 }
 
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
 struct OciSyscall {
     names: Vec<String>,
     action: Action,
@@ -107,7 +108,6 @@ struct OciSyscall {
 }
 
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
 struct AbstractSyscall {
     names: Vec<String>,
     action: Action,
@@ -118,7 +118,6 @@ fn default_architectures() -> Vec<String> {
 }
 
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
 struct OciSeccomp {
     default_action: Action,
     default_errno_ret: Option<u32>,
@@ -150,9 +149,9 @@ pub fn load_profile(
     log_allowed: bool,
 ) -> Result<ScmpFilterContext, ProfileError> {
     let mut ctx = if let Some(path) = profile_path {
-        debug!("Parsing OCI profile: {}", path);
+        debug!("Parsing profile: {}", path);
         match fs::read_to_string(path) {
-            Ok(profile_content) => match serde_json::from_str(&profile_content) {
+            Ok(profile_content) => match toml::from_str(&profile_content) {
                 Ok(oci_seccomp) => apply_profile(
                     oci_seccomp,
                     default_action_override,
@@ -160,12 +159,12 @@ pub fn load_profile(
                     log_allowed,
                 )?,
                 Err(e) => {
-                    error!("Failed to parse OCI profile: {}", e);
-                    return Err(ProfileError::OciParse(e));
+                    error!("Failed to parse profile: {}", e);
+                    return Err(ProfileError::ProfileParse(e));
                 }
             },
             Err(e) => {
-                error!("Failed to read OCI profile: {}", e);
+                error!("Failed to read profile: {}", e);
                 return Err(ProfileError::FileRead(e));
             }
         }
@@ -268,7 +267,7 @@ fn apply_syscall_rules(
         )
         .map_err(|e| {
             error!("Failed to parse abstract rules: {}", e);
-            ProfileError::OciParse(e)
+            ProfileError::AbstractParse(e)
         })?;
 
         for abstract_entry in abstract_syscalls {

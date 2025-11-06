@@ -1,0 +1,19 @@
+default_action = "SCMP_ACT_ERRNO"
+default_errno_ret = 1
+architectures = ["SCMP_ARCH_X86_64"]
+
+[[syscalls]]
+names = ["execve"]
+action = "SCMP_ACT_ALLOW"
+
+[[abstract_syscalls]]
+names = [
+  "filesystem_readonly",
+  "mmap_ops",
+  "memory_allocate",
+  "prctl_ops",
+  "threads_create",
+  "stdio_app",
+  "exit_ops",
+]
+action = "SCMP_ACT_ALLOW"

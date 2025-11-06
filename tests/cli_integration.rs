@@ -1,6 +1,7 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::Path;
 
 // ============================================================================
@@ -8,21 +9,24 @@ use std::path::Path;
 // ============================================================================
 
 fn create_test_profile(path: &Path, content: &str) -> std::io::Result<()> {
-    fs::write(path, content)
+    File::create(path)?.write_all(content.as_bytes())
 }
 
 fn basic_profile() -> String {
-    r#"{
-  "defaultAction": "allow",
-  "defaultErrnoRet": null,
-  "architectures": ["SCMP_ARCH_X86_64"],
-  "syscalls": [
-    {
-      "names": ["read", "write"],
-      "action": "allow"
-    }
-  ]
-}"#
+    r#"
+        default_action = "SCMP_ACT_ALLOW"
+        architectures = ["SCMP_ARCH_X86_64", "SCMP_ARCH_X32"]
+
+        [[syscalls]]
+        names = ["read", "write"]
+        action = "SCMP_ACT_LOG"
+
+        [[abstract_syscalls]]
+        names = [
+          "memory_allocate",
+        ]
+        action = "SCMP_ACT_LOG"
+        "#
     .to_string()
 }
 
@@ -76,27 +80,27 @@ fn test_exec_missing_executable() {
 fn test_exec_with_nonexistent_profile() {
     Command::cargo_bin("tiny-jail")
         .unwrap()
-        .args(["exec", "--profile", "/nonexistent/profile.json", "true"])
+        .args(["exec", "--profile", "/nonexistent/profile.toml", "true"])
         .assert()
         .failure()
         .stdout(predicate::str::contains(
-            "Failed to read OCI profile: No such file or directory",
+            "Failed to read profile: No such file or directory",
         ));
 }
 
 #[test]
-fn test_exec_with_invalid_profile_json() {
+fn test_exec_with_invalid_profile_toml() {
     let temp_dir = std::env::temp_dir();
-    let profile_path = temp_dir.join("invalid_profile.json");
+    let profile_path = temp_dir.join("invalid_profile.toml");
 
-    create_test_profile(&profile_path, "{ invalid json }").unwrap();
+    create_test_profile(&profile_path, "!invalid toml!").unwrap();
 
     Command::cargo_bin("tiny-jail")
         .unwrap()
         .args(["exec", "--profile", profile_path.to_str().unwrap(), "true"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains("Failed to parse OCI profile"));
+        .stdout(predicate::str::contains("Failed to parse profile"));
 
     let _ = fs::remove_file(profile_path);
 }
@@ -126,7 +130,7 @@ fn test_exec_with_invalid_action() {
 #[ignore = "Requires elevated privileges or CAP_SYS_ADMIN"]
 fn test_exec_with_valid_profile_needs_root() {
     let temp_dir = std::env::temp_dir();
-    let profile_path = temp_dir.join("valid_profile.json");
+    let profile_path = temp_dir.join("valid_profile.toml");
 
     create_test_profile(&profile_path, &basic_profile()).unwrap();
 
@@ -149,7 +153,7 @@ fn test_exec_with_valid_profile_needs_root() {
 #[ignore = "Requires elevated privileges or CAP_SYS_ADMIN"]
 fn test_exec_with_environment_flag_needs_root() {
     let temp_dir = std::env::temp_dir();
-    let profile_path = temp_dir.join("env_profile.json");
+    let profile_path = temp_dir.join("env_profile.toml");
 
     create_test_profile(&profile_path, &basic_profile()).unwrap();
 
@@ -173,7 +177,7 @@ fn test_exec_with_environment_flag_needs_root() {
 #[ignore = "Requires elevated privileges or CAP_SYS_ADMIN"]
 fn test_debug_flag_short_needs_root() {
     let temp_dir = std::env::temp_dir();
-    let profile_path = temp_dir.join("debug_profile.json");
+    let profile_path = temp_dir.join("debug_profile.toml");
 
     create_test_profile(&profile_path, &basic_profile()).unwrap();
 
@@ -197,7 +201,7 @@ fn test_debug_flag_short_needs_root() {
 #[ignore = "Requires elevated privileges or CAP_SYS_ADMIN"]
 fn test_kill_and_log_flags_needs_root() {
     let temp_dir = std::env::temp_dir();
-    let profile_path = temp_dir.join("combined_profile.json");
+    let profile_path = temp_dir.join("combined_profile.toml");
 
     create_test_profile(&profile_path, &basic_profile()).unwrap();
 
@@ -230,7 +234,7 @@ fn test_exec_with_double_dash_separator() {
     // but proves the arguments are parsed correctly
     Command::cargo_bin("tiny-jail")
         .unwrap()
-        .args(["exec", "--profile", "/nonexistent.json", "--", "ls", "-l"])
+        .args(["exec", "--profile", "/nonexistent.toml", "--", "ls", "-l"])
         .assert()
         .failure();
 }
@@ -242,7 +246,7 @@ fn test_multiple_kill_flags() {
         .args([
             "exec",
             "--profile",
-            "/nonexistent.json",
+            "/nonexistent.toml",
             "--kill",
             "read",
             "--kill",
@@ -255,12 +259,16 @@ fn test_multiple_kill_flags() {
 
 #[test]
 fn test_multiple_log_flags() {
+    let temp_dir = std::env::temp_dir();
+    let profile_path = temp_dir.join("valid_profile.toml");
+
+    create_test_profile(&profile_path, &basic_profile()).unwrap();
     Command::cargo_bin("tiny-jail")
         .unwrap()
         .args([
             "exec",
             "--profile",
-            "/nonexistent.json",
+            profile_path.to_str().unwrap(),
             "--log",
             "open",
             "--log",
@@ -268,5 +276,5 @@ fn test_multiple_log_flags() {
             "true",
         ])
         .assert()
-        .failure();
+        .success();
 }

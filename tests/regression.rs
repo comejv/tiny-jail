@@ -6,24 +6,22 @@ use std::process::{Command, Stdio};
 fn test_regression_architecture_handling() {
     // 1. Create a temporary profile file that caused the original issue.
     let profile = r#"
-    {
-        "defaultAction": "SCMP_ACT_ALLOW",
-        "architectures": [
-            "SCMP_ARCH_X86_64"
-        ],
-        "syscalls": [
-            {
-                "names": [
-                    "write"
-                ],
-                "action": "SCMP_ACT_KILL"
-            }
-        ]
-    }
-    "#;
+        default_action = "SCMP_ACT_ALLOW"
+        architectures = ["SCMP_ARCH_X86_64", "SCMP_ARCH_X32"]
 
-    let profile_path = "./regression_test_profile.json";
-    let mut file = File::create(profile_path).expect("Failed to create test profile");
+        [[syscalls]]
+        names = ["read", "write"]
+        action = "SCMP_ACT_LOG"
+
+        [[abstract_syscalls]]
+        names = [
+          "memory_allocate",
+        ]
+        action = "SCMP_ACT_LOG"
+        "#;
+
+    let profile_path = "./regression_test_profile.toml";
+    let mut file = File::create_new(profile_path).expect("Failed to create test profile");
     file.write_all(profile.as_bytes())
         .expect("Failed to write test profile");
 
