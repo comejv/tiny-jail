@@ -338,3 +338,14 @@ fn get_signal_name(signal: i32) -> String {
         Err(_) => format!("UNKNOWN({})", signal),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fuzz_exec() {
+        let result = fuzz_exec(vec!["true".to_string()], false);
+        assert!(matches!(result, Err(CommandError::FuzzingNotImplemented)));
+    }
+}

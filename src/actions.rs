@@ -149,6 +149,18 @@ mod tests {
     use libseccomp::ScmpAction;
 
     #[test]
+    fn test_display_implementation() {
+        assert_eq!(Action::KillProcess.to_string(), "KillProcess");
+        assert_eq!(Action::KillThread.to_string(), "KillThread");
+        assert_eq!(Action::Trap.to_string(), "Trap");
+        assert_eq!(Action::Errno.to_string(), "Errno");
+        assert_eq!(Action::Trace.to_string(), "Trace");
+        assert_eq!(Action::Allow.to_string(), "Allow");
+        assert_eq!(Action::Log.to_string(), "Log");
+        assert_eq!(Action::Unknown.to_string(), "Unknown");
+    }
+
+    #[test]
     fn test_to_scmp_action_conversion() {
         assert_eq!(
             Action::KillProcess.to_scmp_action(None).unwrap(),

@@ -1180,6 +1180,29 @@ mod tests {
     }
 
     #[test]
+    fn test_load_profile_with_profile() {
+        let profile_content = r#"
+            default_action = "KillProcess"
+            architectures = ["SCMP_ARCH_X86_64"]
+        "#;
+        let temp_dir = std::env::temp_dir();
+        let profile_path = temp_dir.join("test_profile.toml");
+        fs::write(&profile_path, profile_content).unwrap();
+
+        let result = load_profile(Some(profile_path.to_str().unwrap().to_string()), None, None, &[], &[], false).unwrap();
+        assert_eq!(result.get_act_default().unwrap(), ScmpAction::KillProcess);
+        assert!(result.is_arch_present(ScmpArch::X8664).unwrap());
+
+        fs::remove_file(profile_path).unwrap();
+    }
+
+    #[test]
+    fn test_load_profile_no_profile() {
+        let result = load_profile(None, None, None, &[], &[], false).unwrap();
+        assert_eq!(result.get_act_default().unwrap(), ScmpAction::Allow);
+    }
+
+    #[test]
     fn test_expand_group_self_reference() {
         let mut groups = HashMap::new();
         groups.insert(

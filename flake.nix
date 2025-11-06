@@ -32,6 +32,7 @@
           pkgs.pkg-config
           pkgs.gcc
           pkgs.vimPlugins.nvim-treesitter-parsers.rust
+          pkgs.cargo-tarpaulin
 
           pkgs.libseccomp
 
