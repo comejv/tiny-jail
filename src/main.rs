@@ -31,6 +31,10 @@ struct Cli {
     #[arg(short = 'e', long)]
     env: bool,
 
+    /// Enable TUI mode (interactive terminal interface).
+    #[arg(long)]
+    tui: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -38,14 +42,9 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Fuzz the given executable to generate a new profile.
-    ///
-    /// This command will run the executable with various inputs to
-    /// create a comprehensive profile of its behavior.
     Fuzz(FuzzArgs),
 
     /// Execute a program with optional profiling/monitoring.
-    ///
-    /// This is the default mode if no other subcommand is specified.
     Exec(ExecArgs),
 
     /// Explore abstract syscalls in a TUI.
@@ -58,29 +57,18 @@ struct ExploreArgs {}
 #[derive(Args, Debug)]
 struct FuzzArgs {
     /// Output file for the generated profile.
-    ///
-    /// If not specified, a default filename will be used (e.g., 'fuzz_profile.json').
     #[arg(short = 'o', long, value_name = "OUTPUT_FILE")]
     output: Option<String>,
 
     /// Number of fuzzing iterations.
-    ///
-    /// Specifies how many times the executable should be fuzzed.
     #[arg(short = 'i', long, default_value_t = 100, value_name = "COUNT")]
     iterations: u32,
 
     /// Number of fuzzing threads.
-    ///
-    /// Controls how many parallel threads will be used for fuzzing.
     #[arg(short = 't', long, default_value_t = 1, value_name = "COUNT")]
     threads: u32,
 
     /// The executable command to run and its arguments.
-    ///
-    /// To pass arguments to the executable that start with a hyphen, you must use `--`
-    /// to separate the arguments for tiny-jail from the arguments for the executable.
-    ///
-    /// For example: `tiny-jail fuzz -i 10 -- my-program --with-arg`
     #[arg(required = true, name = "EXECUTABLE_AND_ARGS", trailing_var_arg = true)]
     exec: Vec<String>,
 }
@@ -88,59 +76,34 @@ struct FuzzArgs {
 #[derive(Args, Debug)]
 struct ExecArgs {
     /// Path to the profile file.
-    ///
-    /// This file is used for loading existing profiles or for generating new ones.
     #[arg(long, value_name = "FILE")]
     profile: Option<String>,
 
     /// Default action for syscalls not specified in the profile.
-    ///
-    /// This will override the default action in the profile.
     #[arg(short = 'd', long, value_enum)]
     default_action: Option<Action>,
 
     /// Default errno return value for SCMP_ACT_ERRNO actions.
-    ///
-    /// This will override the errno_ret in the profile.
     #[arg(short = 'e', long, value_name = "ERRNO_VALUE")]
     default_errno: Option<u32>,
 
     /// Kill processes that call the specified syscall name.
-    ///
-    /// Will be enforced in addition to the specified profile.
-    /// Can be specified multiple times.
-    ///
-    /// For example: --kill write --kill read
     #[arg(long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
     kill: Vec<String>,
 
     /// Log processes that call the specified syscall name.
-    ///
-    /// Will be enforced in addition to the specified profile.
-    /// Can be specified multiple times.
-    ///
-    /// For example: --log write --log read
     #[arg(long, value_name = "SYSCALL_NAME", action = ArgAction::Append)]
     log: Vec<String>,
 
     /// Prints the logged syscalls to the console.
-    ///
-    /// Requires admin privileges.
     #[arg(short = 'w', long = "watch-logs")]
     show_log: bool,
 
-    /// Change all SCMP_ACT_ALLOW rules to SCMP_ACT_LOG and show the logs in the output.
-    ///
-    /// Requires admin privileges.
+    /// Change all SCMP_ACT_ALLOW rules to SCMP_ACT_LOG and show the logs.
     #[arg(short = 'W', long = "watch-all-logs")]
     show_all: bool,
 
     /// The executable command to run and its arguments.
-    ///
-    /// To pass arguments to the executable that start with a hyphen, you must use `--`
-    /// to separate the arguments for tiny-jail from the arguments for the executable.
-    ///
-    /// For example: `tiny-jail exec --profile p.json -- ls -l`
     #[arg(required = true, name = "EXECUTABLE_AND_ARGS", trailing_var_arg = true)]
     exec: Vec<String>,
 }
@@ -155,10 +118,17 @@ fn main() {
 fn run() -> Result<(), AppError> {
     let cli = Cli::parse();
 
-    let _log2 = log2::stdout()
-        .module(cli.debug)
-        .level(if cli.debug { "debug" } else { "info" })
-        .start();
+    // Don't initialize logger if TUI mode is enabled
+    let _log2 = if !cli.tui {
+        Some(
+            log2::stdout()
+                .module(cli.debug)
+                .level(if cli.debug { "debug" } else { "info" })
+                .start(),
+        )
+    } else {
+        None
+    };
 
     match cli.command {
         Commands::Exec(exec_args) => {
@@ -171,25 +141,37 @@ fn run() -> Result<(), AppError> {
                 exec_args.show_all,
             )?;
 
-            info!("Running the given command...");
-            debug!("Command: {:?}", exec_args.exec);
-            filtered_exec(
-                filter,
-                exec_args.exec,
-                cli.env,
-                exec_args.show_log,
-                exec_args.show_all,
-            )?;
-            info!("Execution finished.");
+            // Determine if we should use TUI mode
+            let use_tui = cli.tui || exec_args.show_log || exec_args.show_all;
+
+            if use_tui {
+                // Run with TUI monitoring
+                tiny_jail::tui::run_exec_with_tui(
+                    filter,
+                    exec_args.exec,
+                    cli.env,
+                    exec_args.show_all,
+                )?;
+            } else {
+                info!("Running the given command...");
+                debug!("Command: {:?}", exec_args.exec);
+                filtered_exec(filter, exec_args.exec, cli.env, false, false)?;
+                info!("Execution finished.");
+            }
         }
         Commands::Fuzz(fuzz_args) => {
+            if cli.tui {
+                return Err(AppError::Message(
+                    "TUI mode not yet implemented for fuzz command".to_string(),
+                ));
+            }
             info!("Fuzzing the given command...");
             debug!("Command: {:?}", fuzz_args.exec);
             fuzz_exec(fuzz_args.exec, cli.env)?;
             info!("Fuzzing finished.");
         }
         Commands::Explore(_explore_args) => {
-            tiny_jail::tui::run_tui()?;
+            tiny_jail::tui::run_explore_tui()?;
         }
     }
 

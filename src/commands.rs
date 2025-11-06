@@ -76,7 +76,7 @@ pub fn fuzz_exec(_path: Vec<String>, _pass_env: bool) -> Result<(), CommandError
 // BPF Filter Export
 // ============================================================================
 
-fn export_bpf_filter(ctx: &ScmpFilterContext) -> Result<Vec<u8>, CommandError> {
+pub fn export_bpf_filter(ctx: &ScmpFilterContext) -> Result<Vec<u8>, CommandError> {
     #[cfg(libseccomp_2_6)]
     {
         ctx.export_bpf_mem().map_err(CommandError::LibSeccomp)
@@ -90,7 +90,7 @@ fn export_bpf_filter(ctx: &ScmpFilterContext) -> Result<Vec<u8>, CommandError> {
 }
 
 #[cfg(not(libseccomp_2_6))]
-fn export_bpf_via_pipe(ctx: &ScmpFilterContext) -> Result<Vec<u8>, CommandError> {
+pub fn export_bpf_via_pipe(ctx: &ScmpFilterContext) -> Result<Vec<u8>, CommandError> {
     let (mut reader, writer) = io::pipe().map_err(CommandError::Io)?;
     ctx.export_bpf(&writer).map_err(CommandError::LibSeccomp)?;
     drop(writer);
@@ -104,7 +104,7 @@ fn export_bpf_via_pipe(ctx: &ScmpFilterContext) -> Result<Vec<u8>, CommandError>
 // Command Building
 // ============================================================================
 
-fn build_command(path: &[String], pass_env: bool) -> Command {
+pub fn build_command(path: &[String], pass_env: bool) -> Command {
     let mut command = Command::new(&path[0]);
     command.args(&path[1..]);
 
@@ -116,7 +116,7 @@ fn build_command(path: &[String], pass_env: bool) -> Command {
     command
 }
 
-fn apply_seccomp_filter(command: &mut Command, bpf_bytes: Vec<u8>) {
+pub fn apply_seccomp_filter(command: &mut Command, bpf_bytes: Vec<u8>) {
     unsafe {
         command.pre_exec(move || {
             set_no_new_privs()?;
@@ -337,4 +337,26 @@ fn get_signal_name(signal: i32) -> String {
         Ok(sig) => format!("{:?}", sig),
         Err(_) => format!("UNKNOWN({})", signal),
     }
+}
+
+/// Execute with TUI monitoring (for external use)
+pub fn execute_with_tui_monitoring(
+    mut command: Command,
+) -> Result<(std::process::ExitStatus, SeccompMonitor), CommandError> {
+    let mut monitor = SeccompMonitor::new();
+
+    monitor
+        .start()
+        .map_err(|e| CommandError::Monitor(format!("{:?}", e)))?;
+
+    thread::sleep(Duration::from_millis(500));
+
+    let child_pid = spawn_child(&mut command)?;
+    debug!("Child process spawned with PID: {}", child_pid);
+
+    let status = wait_for_child(child_pid)?;
+
+    thread::sleep(Duration::from_millis(500));
+
+    Ok((status, monitor))
 }
