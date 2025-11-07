@@ -1,6 +1,23 @@
+use std::fs;
 use std::process::Command;
 
 fn main() {
+    // Minify abstract rules json with jq
+    let output = Command::new("jq")
+        .args(["-r", "tostring", "data/abstract_rules.json"])
+        .output()
+        .expect("Failed to run jq");
+
+    if !output.status.success() {
+        panic!(
+            "jq command failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fs::write("data/abstract_rules.min.json", output.stdout)
+        .expect("Failed to write minified json");
+
     // Try to detect libseccomp version from pkg-config
     if let Ok(output) = Command::new("pkg-config")
         .args(["--modversion", "libseccomp"])
