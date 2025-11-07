@@ -86,6 +86,8 @@ struct AbstractGroups {
     groups: HashMap<String, AbstractGroupDef>,
 }
 
+const ABSTRACT_RULES_DATA: &str = include_str!("../data/abstract_rules.min.json");
+
 // ============================================================================
 // Profile Structures
 // ============================================================================
@@ -258,17 +260,11 @@ fn apply_syscall_rules(
     }
 
     if let Some(abstract_syscalls) = abstract_syscalls {
-        let abstract_groups_path = std::path::Path::new("data/abstract_rules.json");
-        let abstract_groups = serde_json::from_str::<AbstractGroups>(
-            &fs::read_to_string(abstract_groups_path).map_err(|e| {
-                error!("Failed to read abstract rules: {}", e);
-                ProfileError::FileRead(e)
-            })?,
-        )
-        .map_err(|e| {
-            error!("Failed to parse abstract rules: {}", e);
-            ProfileError::AbstractParse(e)
-        })?;
+        let abstract_groups =
+            serde_json::from_str::<AbstractGroups>(ABSTRACT_RULES_DATA).map_err(|e| {
+                error!("Failed to parse abstract rules: {}", e);
+                ProfileError::AbstractParse(e)
+            })?;
 
         for abstract_entry in abstract_syscalls {
             for group_name in &abstract_entry.names {
@@ -1189,7 +1185,15 @@ mod tests {
         let profile_path = temp_dir.join("test_profile.toml");
         fs::write(&profile_path, profile_content).unwrap();
 
-        let result = load_profile(Some(profile_path.to_str().unwrap().to_string()), None, None, &[], &[], false).unwrap();
+        let result = load_profile(
+            Some(profile_path.to_str().unwrap().to_string()),
+            None,
+            None,
+            &[],
+            &[],
+            false,
+        )
+        .unwrap();
         assert_eq!(result.get_act_default().unwrap(), ScmpAction::KillProcess);
         assert!(result.is_arch_present(ScmpArch::X8664).unwrap());
 

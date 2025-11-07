@@ -36,8 +36,7 @@ fn basic_profile() -> String {
 
 #[test]
 fn test_help_flag() {
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .arg("--help")
         .assert()
         .success()
@@ -46,8 +45,7 @@ fn test_help_flag() {
 
 #[test]
 fn test_version_flag() {
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .arg("--version")
         .assert()
         .success();
@@ -59,8 +57,7 @@ fn test_version_flag() {
 
 #[test]
 fn test_exec_help() {
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args(["exec", "--help"])
         .assert()
         .success()
@@ -69,8 +66,7 @@ fn test_exec_help() {
 
 #[test]
 fn test_exec_missing_executable() {
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .arg("exec")
         .assert()
         .failure();
@@ -78,8 +74,7 @@ fn test_exec_missing_executable() {
 
 #[test]
 fn test_exec_with_nonexistent_profile() {
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args(["exec", "--profile", "/nonexistent/profile.toml", "true"])
         .assert()
         .failure()
@@ -95,8 +90,7 @@ fn test_exec_with_invalid_profile_toml() {
 
     create_test_profile(&profile_path, "!invalid toml!").unwrap();
 
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args(["exec", "--profile", profile_path.to_str().unwrap(), "true"])
         .assert()
         .failure()
@@ -107,8 +101,7 @@ fn test_exec_with_invalid_profile_toml() {
 
 #[test]
 fn test_exec_with_invalid_default_errno() {
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args(["exec", "--default-errno", "not_a_number", "true"])
         .assert()
         .failure();
@@ -116,8 +109,7 @@ fn test_exec_with_invalid_default_errno() {
 
 #[test]
 fn test_exec_with_invalid_action() {
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args(["exec", "--default-action", "invalid_action", "true"])
         .assert()
         .failure();
@@ -134,8 +126,7 @@ fn test_exec_with_valid_profile_needs_root() {
 
     create_test_profile(&profile_path, &basic_profile()).unwrap();
 
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args([
             "exec",
             "--profile",
@@ -157,8 +148,7 @@ fn test_exec_with_environment_flag_needs_root() {
 
     create_test_profile(&profile_path, &basic_profile()).unwrap();
 
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args([
             "-e",
             "exec",
@@ -181,8 +171,7 @@ fn test_debug_flag_short_needs_root() {
 
     create_test_profile(&profile_path, &basic_profile()).unwrap();
 
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args([
             "-d",
             "exec",
@@ -205,8 +194,7 @@ fn test_kill_and_log_flags_needs_root() {
 
     create_test_profile(&profile_path, &basic_profile()).unwrap();
 
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args([
             "exec",
             "--profile",
@@ -232,8 +220,7 @@ fn test_kill_and_log_flags_needs_root() {
 fn test_exec_with_double_dash_separator() {
     // This tests the parsing by using a command that will fail at profile load
     // but proves the arguments are parsed correctly
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args(["exec", "--profile", "/nonexistent.toml", "--", "ls", "-l"])
         .assert()
         .failure();
@@ -241,8 +228,7 @@ fn test_exec_with_double_dash_separator() {
 
 #[test]
 fn test_multiple_kill_flags() {
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args([
             "exec",
             "--profile",
@@ -263,8 +249,7 @@ fn test_multiple_log_flags() {
     let profile_path = temp_dir.join("valid_profile.toml");
 
     create_test_profile(&profile_path, &basic_profile()).unwrap();
-    Command::cargo_bin("tiny-jail")
-        .unwrap()
+    Command::new("target/debug/tiny-jail")
         .args([
             "exec",
             "--profile",
