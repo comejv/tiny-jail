@@ -31,6 +31,22 @@ Policies will allow users to specify a required `defaultAction` and specific act
 *   **`SCMP_ACT_ERRNO`** (return a specific error code, e.g., `EPERM`).
 *   **`SCMP_ACT_NOTIFY`** (send the process state to a userspace agent for dynamic handling).
 
+## Building
+
+To compile `tiny-jail`, the `audisp-plugin` must be built first. This is because `tiny-jail` includes the `audisp-plugin` as a byte array, and the build process expects the plugin to be pre-compiled.
+
+If you encounter an error like:
+```
+error: couldn't read `src/../target/release/audisp-plugin`: No such file or directory (os error 2)
+  --> src/audisp.rs:29:29
+   |
+29 | const PLUGIN_BYTES: &[u8] = include_bytes!("../target/release/audisp-plugin");
+   |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: could not compile `tiny-jail` (bin "tiny-jail") due to 1 previous error
+```
+You need to manually build the `audisp-plugin` first. Navigate to the `audisp_plugin` directory and run `cargo build --release`. After the plugin is built, you can then build the main `tiny-jail` project.
+
 ---
 **External References:**
 

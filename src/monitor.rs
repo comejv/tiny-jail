@@ -1,8 +1,7 @@
 use log2::*;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
-use std::process::Child;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -63,82 +62,66 @@ pub fn decode_code(raw: u32) -> DecodedCode {
 
 impl SeccompEvent {
     fn parse(line: &str) -> Result<Self, MonitorError> {
-        // Check if it's a seccomp audit entry (type=1326) or suppressed callbacks
-        if !line.contains("type=1326") {
-            if line.contains("callbacks suppressede") {
-                return Err(MonitorError::CallbackSuppressed);
-            }
+        if !line.contains("type=SECCOMP") {
             return Err(MonitorError::ParseError(
                 "Not a seccomp audit entry".to_string(),
             ));
         }
 
-        // Parse audit timestamp from audit(timestamp:id) format
-        let timestamp = line
-            .find("audit(")
-            .and_then(|start| {
-                let after = &line[start + 6..];
-                after.find(')').map(|end| &after[..end])
-            })
-            .ok_or_else(|| MonitorError::ParseError("Timestamp not found".to_string()))?
-            .to_string();
+        let clean_line = line.split('\u{1d}').next().unwrap_or(line);
+        let mut fields = HashMap::new();
+        for part in clean_line.split(' ') {
+            if let Some((key, value)) = part.split_once('=') {
+                fields.insert(key, value);
+            }
+        }
 
-        // Helper to extract field values (single pass per field)
-        let extract_field = |field: &str| -> Option<&str> {
-            line.find(field).map(|start| {
-                let after = &line[start + field.len()..];
-                let end = after.find(' ').unwrap_or(after.len());
-                &after[..end]
-            })
+        let get_field = |key: &str| -> Result<String, MonitorError> {
+            fields
+                .get(key)
+                .map(|s| s.to_string())
+                .ok_or_else(|| MonitorError::ParseError(format!("Missing field: {}", key)))
         };
 
-        // Helper for quoted fields
-        let extract_quoted = |field: &str| -> Option<String> {
-            line.find(field).and_then(|start| {
-                let after = &line[start + field.len()..];
-                after
-                    .strip_prefix('"')
-                    .and_then(|s| s.find('"').map(|end| s[..end].to_string()))
-            })
-        };
-
-        // Parse numeric field (handles both hex and decimal)
-        let parse_u32 = |field: &str| -> Result<u32, MonitorError> {
-            let value = extract_field(field)
-                .ok_or_else(|| MonitorError::ParseError(format!("Missing {}", field)))?;
-
+        let parse_u32 = |key: &str| -> Result<u32, MonitorError> {
+            let value = get_field(key)?;
             if let Some(hex) = value.strip_prefix("0x") {
                 u32::from_str_radix(hex, 16)
             } else {
                 value.parse()
             }
-            .map_err(|_| MonitorError::ParseError(format!("Invalid {}: {}", field, value)))
+            .map_err(|_| MonitorError::ParseError(format!("Invalid u32 for {}: {}", key, value)))
         };
 
-        // Extract string field
-        let get_string = |field: &str| -> Result<String, MonitorError> {
-            extract_field(field)
-                .map(|s| s.to_string())
-                .ok_or_else(|| MonitorError::ParseError(format!("Missing {}", field)))
+        let get_quoted_field = |key: &str| -> Result<String, MonitorError> {
+            fields
+                .get(key)
+                .map(|s| s.trim_matches('"').to_string())
+                .ok_or_else(|| MonitorError::ParseError(format!("Missing field: {}", key)))
         };
+
+        let timestamp = fields
+            .get("msg")
+            .and_then(|msg| msg.strip_prefix("audit("))
+            .and_then(|s| s.split(':').next())
+            .map(|s| s.to_string())
+            .ok_or_else(|| MonitorError::ParseError("Timestamp not found".to_string()))?;
 
         Ok(SeccompEvent {
             timestamp,
-            auid: parse_u32("auid=")?,
-            uid: parse_u32("uid=")?,
-            gid: parse_u32("gid=")?,
-            ses: parse_u32("ses=")?,
-            pid: parse_u32("pid=")?,
-            comm: extract_quoted("comm=")
-                .ok_or_else(|| MonitorError::ParseError("Missing comm".to_string()))?,
-            exe: extract_quoted("exe=")
-                .ok_or_else(|| MonitorError::ParseError("Missing exe".to_string()))?,
-            sig: parse_u32("sig=")?,
-            arch: get_string("arch=")?,
-            syscall: parse_u32("syscall=")?,
-            compat: parse_u32("compat=")?,
-            ip: get_string("ip=")?,
-            code: parse_u32("code=")?,
+            auid: parse_u32("auid")?,
+            uid: parse_u32("uid")?,
+            gid: parse_u32("gid")?,
+            ses: parse_u32("ses")?,
+            pid: parse_u32("pid")?,
+            comm: get_quoted_field("comm")?,
+            exe: get_quoted_field("exe")?,
+            sig: parse_u32("sig")?,
+            arch: get_field("arch")?,
+            syscall: parse_u32("syscall")?,
+            compat: parse_u32("compat")?,
+            ip: get_field("ip")?,
+            code: parse_u32("code")?,
             decoded: DecodedCode::default(),
         }
         .with_decoded())
@@ -345,7 +328,7 @@ impl SeccompMonitor {
 
         debug!("Stopping monitor...");
 
-        // Kill the dmesg process
+        // Kill the tail process
         if let Ok(mut guard) = self.child_process.lock() {
             if let Some(mut child) = guard.take() {
                 let _ = child.kill();
@@ -475,47 +458,32 @@ impl SeccompMonitor {
         tx_ready: Sender<()>,
         child_process: Arc<Mutex<Option<Child>>>,
     ) {
-        // 1) Refresh sudo credentials
-        match Command::new("sudo")
-            .arg("-v")
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()
-        {
-            Ok(status) if status.success() => {}
-            Ok(status) => {
-                error!("sudo -v failed, exit code {:?}", status.code());
-                let _ = tx_ready.send(());
-                return;
-            }
-            Err(e) => {
-                error!("failed to exec sudo -v: {}", e);
-                let _ = tx_ready.send(());
-                return;
-            }
+        let log_file = "/tmp/audit.log";
+
+        // Ensure the log file exists before tailing it
+        if let Err(e) = std::fs::File::create(log_file) {
+            error!("failed to create log file {}: {}", log_file, e);
+            let _ = tx_ready.send(());
+            return;
         }
 
-        // 2) Spawn dmesg monitor
-        let mut child = match Command::new("sudo")
-            .args(["dmesg", "-W", "-T"])
-            .stdin(Stdio::inherit())
+        // 1) Spawn tail -f monitor
+        let mut child = match Command::new("tail")
+            .args(["-f", log_file])
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
             .spawn()
         {
             Ok(c) => c,
             Err(e) => {
-                error!("failed to start `sudo dmesg`: {}", e);
+                error!("failed to start `tail -f`: {}", e);
                 let _ = tx_ready.send(());
                 return;
             }
         };
-
         let stdout = match child.stdout.take() {
             Some(s) => s,
             None => {
-                error!("could not capture dmesg stdout");
+                error!("could not capture tail stdout");
                 let _ = tx_ready.send(());
                 let _ = child.kill();
                 let _ = child.wait();
@@ -525,10 +493,10 @@ impl SeccompMonitor {
 
         *child_process.lock().unwrap() = Some(child);
 
-        // 3) Signal ready
+        // 2) Signal ready
         let _ = tx_ready.send(());
 
-        // 4) Stream events
+        // 3) Stream events
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
             match line {
@@ -542,23 +510,19 @@ impl SeccompMonitor {
                     Err(MonitorError::ParseError(e)) if e.contains("Not a seccomp audit entry") => {
                         continue;
                     }
-                    Err(MonitorError::CallbackSuppressed) => {
-                        warn!("audit is being throttled, not all events will be shown");
-                        continue;
-                    }
                     Err(e) => {
                         error!("Could not parse the event: {:?}", e);
                         continue;
                     }
                 },
                 Err(err) => {
-                    error!("error reading from dmesg: {}", err);
+                    error!("error reading from tail: {}", err);
                     break;
                 }
             }
         }
 
-        // 5) Cleanup
+        // 4) Cleanup
         if let Ok(mut guard) = child_process.lock() {
             if let Some(mut child) = guard.take() {
                 let _ = child.kill();
@@ -586,26 +550,24 @@ mod tests {
 
     #[test]
     fn test_parse_seccomp_event() {
-        let line = r#"[mer. 22 oct. 16:59:18 2025] audit: type=1326 audit(1761049793.948:471): auid=1000 uid=1000 gid=1000 ses=2 pid=38620 comm="ls" exe="/usr/bin/ls" sig=31 arch=c000003e syscall=1 compat=0 ip=0x7ffff7ca6527 code=0x0"#
-            .to_string();
+        let line = r#"type=SECCOMP msg=audit(1678886400.123:456): auid=1000 uid=1000 gid=1000 ses=1 pid=1234 comm="my_app" exe="/usr/bin/my_app" sig=0 arch=c000003e syscall=2 compat=0 ip=0x7f1234567890 code=0x7fff0000"#;
 
-        let event = SeccompEvent::parse(&line).unwrap();
+        let event = SeccompEvent::parse(line).unwrap();
+        assert_eq!(event.timestamp, "1678886400.123");
         assert_eq!(event.auid, 1000);
         assert_eq!(event.uid, 1000);
         assert_eq!(event.gid, 1000);
-        assert_eq!(event.ses, 2);
-        assert_eq!(event.pid, 38620);
-        assert_eq!(event.comm, "ls");
-        assert_eq!(event.exe, "/usr/bin/ls");
-        assert_eq!(event.sig, 31);
-        assert_eq!(event.syscall, 1);
+        assert_eq!(event.ses, 1);
+        assert_eq!(event.pid, 1234);
+        assert_eq!(event.comm, "my_app");
+        assert_eq!(event.exe, "/usr/bin/my_app");
+        assert_eq!(event.sig, 0);
+        assert_eq!(event.arch, "c000003e");
+        assert_eq!(event.syscall, 2);
         assert_eq!(event.compat, 0);
-        assert_eq!(event.ip, "0x7ffff7ca6527");
-        assert_eq!(event.code, 0);
-        assert_eq!(event.decoded.raw, 0);
-        assert_eq!(event.decoded.class, 0);
-        assert_eq!(event.decoded.data, 0);
-        assert_eq!(event.decoded.action, Action::KillThread);
+        assert_eq!(event.ip, "0x7f1234567890");
+        assert_eq!(event.code, 0x7fff0000);
+        assert_eq!(event.decoded.action, Action::Allow);
     }
 
     #[test]

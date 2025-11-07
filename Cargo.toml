@@ -1,6 +1,6 @@
 [package]
 name = "tiny-jail"
-version = "0.1.15"
+version = "0.2.0"
 edition = "2021"
 authors = ["Côme VINCENT <come.vincent@polytechnique.edu>"]
 license = "GPL-3.0"
@@ -8,6 +8,7 @@ description = "Seccomp filter generation using functional syscall groups and fuz
 repository = "https://github.com/comejv/tiny-jail"
 keywords = ["seccomp", "security", "syscall", "sandbox", "fuzzing"]
 categories = ["os::linux-apis"]
+build = "build.rs"
 
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(libseccomp_2_6)'] }
@@ -27,3 +28,10 @@ toml = "0.9.8"
 
 [dev-dependencies]
 
+[[bin]]
+name = "tiny-jail"
+path = "src/main.rs"
+
+[[bin]]
+name = "audisp-plugin"
+path = "src/audisp_plugin.rs"
