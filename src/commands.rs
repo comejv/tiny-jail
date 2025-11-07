@@ -61,7 +61,7 @@ pub fn filtered_exec(
     apply_seccomp_filter(&mut command, bpf_bytes);
 
     if show_log || show_all {
-        execute_with_monitoring(command, show_all)
+        execute_with_monitoring(command)
     } else {
         execute_without_monitoring(command)
     }
@@ -191,10 +191,10 @@ fn execute_without_monitoring(mut command: Command) -> Result<(), CommandError> 
 // Execution With Monitoring
 // ============================================================================
 
-fn execute_with_monitoring(mut command: Command, show_all: bool) -> Result<(), CommandError> {
+fn execute_with_monitoring(mut command: Command) -> Result<(), CommandError> {
     // Start the monitor
     let mut monitor = SeccompMonitor::new();
-    warn!("Starting seccomp monitor (requires sudo)...\n");
+    info!("Starting seccomp monitor...\n");
 
     monitor
         .start()
@@ -208,7 +208,7 @@ fn execute_with_monitoring(mut command: Command, show_all: bool) -> Result<(), C
     debug!("Child process spawned with PID: {}", child_pid);
 
     // Wait for child and collect events concurrently
-    let status = wait_and_collect_events(child_pid, &mut monitor, show_all)?;
+    let status = wait_and_collect_events(child_pid, &mut monitor)?;
 
     // Allow final events to arrive
     thread::sleep(Duration::from_millis(500));
@@ -241,7 +241,6 @@ fn spawn_child(command: &mut Command) -> Result<u32, CommandError> {
 fn wait_and_collect_events(
     child_pid: u32,
     monitor: &mut SeccompMonitor,
-    show_all: bool,
 ) -> Result<std::process::ExitStatus, CommandError> {
     // Spawn wait thread
     let (tx_status, rx_status) = std::sync::mpsc::channel();
@@ -270,9 +269,7 @@ fn wait_and_collect_events(
 
         // Collect and print events
         if let Some(event) = monitor.next_event(Duration::from_millis(100)) {
-            if show_all || event.is_fatal() {
-                event.print_event();
-            }
+            event.print_event();
         }
     }
 }
