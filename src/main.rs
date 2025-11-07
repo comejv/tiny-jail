@@ -6,6 +6,10 @@ use tiny_jail::actions::Action;
 use tiny_jail::commands::{filtered_exec, fuzz_exec, CommandError};
 use tiny_jail::filters::{load_profile, ProfileError};
 
+// Cannot be in lib.rs due to circular dependency
+mod audisp;
+use audisp::AudispGuard;
+
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("Profile loading failed: {0}")]
@@ -14,6 +18,8 @@ pub enum AppError {
     Command(#[from] CommandError),
     #[error("{0}")]
     Message(String),
+    #[error("Audisp control failed: {0}")]
+    Audisp(String),
 }
 
 #[derive(Parser, Debug)]
@@ -153,6 +159,20 @@ fn run() -> Result<(), AppError> {
 
     match cli.command {
         Commands::Exec(exec_args) => {
+            let _guard = if exec_args.show_log || exec_args.show_all {
+                warn!("Getting log from auditd requires sudo, do you want to continue? [y/N]");
+                let mut input = String::new();
+                std::io::stdin()
+                    .read_line(&mut input)
+                    .map_err(|e| AppError::Audisp(format!("Failed to read input: {}", e)))?;
+                if !input.trim().eq_ignore_ascii_case("y") {
+                    return Ok(());
+                }
+                Some(AudispGuard::install().map_err(AppError::Audisp)?)
+            } else {
+                None
+            };
+
             let filter = load_profile(
                 exec_args.profile,
                 exec_args.default_action,
