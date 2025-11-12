@@ -111,6 +111,7 @@ jobs:
         if: ${{ steps.version_check.outputs.should_release == 'true' }}
         run: |
           set -euo pipefail
+          cargo build --locked --release --bin audisp-plugin
           cargo test --locked --verbose
 
       - name: Build release binary
@@ -119,6 +120,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cargo build --locked --release --bin audisp-plugin
           cargo build --locked --release
           BIN="${{ steps.cargo_meta.outputs.name }}"
           SRC="target/release/${BIN}"
