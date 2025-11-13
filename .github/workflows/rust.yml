@@ -47,12 +47,12 @@ jobs:
           set -euo pipefail
           if command -v cargo >/dev/null 2>&1; then
             pkg_name=$(cargo metadata --no-deps --format-version=1 \
-              | jq -r '.packages[0].name')
+              | jq -r '.packages[] | select(.name == "tiny-jail") | .name')
             version=$(cargo metadata --no-deps --format-version=1 \
-              | jq -r '.packages[0].version')
+              | jq -r '.packages[] | select(.name == "tiny-jail") | .version')
           else
-            pkg_name=$(grep -m1 '^name\s*=' Cargo.toml | cut -d '"' -f 2)
-            version=$(grep -m1 '^version\s*=' Cargo.toml | cut -d '"' -f 2)
+            pkg_name=$(grep -m1 '^name\s*=' tiny-jail/Cargo.toml | cut -d '"' -f 2)
+            version=$(grep -m1 '^version\s*=' tiny-jail/Cargo.toml | cut -d '"' -f 2)
           fi
           echo "name=$pkg_name" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -111,8 +111,7 @@ jobs:
         if: ${{ steps.version_check.outputs.should_release == 'true' }}
         run: |
           set -euo pipefail
-          cargo build --locked --release --bin audisp-plugin
-          cargo test --locked --verbose
+          cargo test --locked --verbose --workspace
 
       - name: Build release binary
         if: ${{ steps.version_check.outputs.should_release == 'true' }}
@@ -120,8 +119,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --locked --release --bin audisp-plugin
-          cargo build --locked --release
+          cargo build --locked --release --workspace
           BIN="${{ steps.cargo_meta.outputs.name }}"
           SRC="target/release/${BIN}"
           if [ ! -f "$SRC" ]; then

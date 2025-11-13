@@ -1,4 +1,4 @@
-use assert_cmd::Command;
+use assert_cmd::{cargo_bin, Command};
 use predicates::prelude::*;
 use std::fs::{self, File};
 use std::io::Write;
@@ -36,7 +36,7 @@ fn basic_profile() -> String {
 
 #[test]
 fn test_fuzz_help() {
-    Command::new("./target/debug/tiny-jail")
+    Command::new(cargo_bin!())
         .args(["fuzz", "--help"])
         .assert()
         .success()
@@ -47,10 +47,7 @@ fn test_fuzz_help() {
 
 #[test]
 fn test_fuzz_missing_executable() {
-    Command::new("./target/debug/tiny-jail")
-        .arg("fuzz")
-        .assert()
-        .failure();
+    Command::new(cargo_bin!()).arg("fuzz").assert().failure();
 }
 
 #[test]
@@ -58,7 +55,7 @@ fn test_fuzz_with_output_file() {
     let temp_dir = std::env::temp_dir();
     let profile_path = temp_dir.join("fuzz_profile.toml");
 
-    Command::new("./target/debug/tiny-jail")
+    Command::new(cargo_bin!())
         .args([
             "fuzz",
             "--output",

@@ -1,6 +1,6 @@
+use assert_cmd::{cargo_bin, Command};
 use std::fs::{self, File};
 use std::io::Write;
-use std::process::{Command, Stdio};
 
 #[test]
 fn test_regression_architecture_handling() {
@@ -27,15 +27,8 @@ fn test_regression_architecture_handling() {
 
     // 2. Run the tiny-jail binary with this profile.
     // We expect the `ls -l` command to be killed by SIGSYS when it tries to write.
-    let output = Command::new("./target/debug/tiny-jail")
-        .arg("exec")
-        .arg("--profile")
-        .arg(profile_path)
-        .arg("--")
-        .arg("/bin/ls")
-        .arg("-l")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+    let output = Command::new(cargo_bin!())
+        .args(["exec", "--profile", profile_path, "--", "/bin/ls", "-l"])
         .output()
         .expect("Failed to execute tiny-jail");
 
@@ -52,13 +45,8 @@ fn test_regression_architecture_handling() {
 
 #[test]
 fn test_regression_kill_invalid() {
-    let output = Command::new("./target/debug/tiny-jail")
-        .arg("exec")
-        .arg("--kill")
-        .arg("invalid")
-        .arg("ls")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+    let output = Command::new(cargo_bin!())
+        .args(["exec", "--kill", "invalid", "ls"])
         .output()
         .expect("Failed to execute tiny-jail");
 
@@ -78,13 +66,8 @@ fn test_regression_kill_invalid() {
 
 #[test]
 fn test_regression_log_invalid() {
-    let output = Command::new("./target/debug/tiny-jail")
-        .arg("exec")
-        .arg("--log")
-        .arg("invalid")
-        .arg("ls")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+    let output = Command::new(cargo_bin!())
+        .args(["exec", "--log", "invalid", "ls"])
         .output()
         .expect("Failed to execute tiny-jail");
 

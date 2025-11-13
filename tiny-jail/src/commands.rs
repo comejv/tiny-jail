@@ -54,6 +54,7 @@ pub enum CommandError {
 /// * `pass_env` - Whether to pass environment variables to the child
 /// * `show_log` - Whether to show seccomp event logs
 /// * `show_all` - Whether to show all events (implies show_log)
+/// * `stats_output` - Path to write detailed stats to
 pub fn filtered_exec(
     ctx: ScmpFilterContext,
     path: Vec<String>,
