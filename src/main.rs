@@ -140,6 +140,10 @@ struct ExecArgs {
     /// For example: `tiny-jail exec --profile p.json -- ls -l`
     #[arg(required = true, name = "EXECUTABLE_AND_ARGS", trailing_var_arg = true)]
     exec: Vec<String>,
+
+    /// Output file for detailed statistics.
+    #[arg(long = "stats-output", value_name = "FILE")]
+    stats_output: Option<String>,
 }
 
 fn main() {
@@ -190,6 +194,7 @@ fn run() -> Result<(), AppError> {
                 cli.env,
                 exec_args.show_log,
                 exec_args.show_all,
+                exec_args.stats_output,
             )?;
             info!("Execution finished.");
         }

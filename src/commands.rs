@@ -4,6 +4,9 @@ use nix::libc;
 use nix::sys::signal::Signal;
 use nix::sys::wait::{waitpid, WaitStatus};
 use nix::unistd::Pid;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::fs::File;
 use std::io;
 #[cfg(not(libseccomp_2_6))]
 use std::io::Read;
@@ -35,6 +38,8 @@ pub enum CommandError {
     FuzzingNotImplemented,
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
+    #[error("JSON serialization failed: {0}")]
+    Json(#[from] serde_json::Error),
 }
 
 // ============================================================================
@@ -55,13 +60,14 @@ pub fn filtered_exec(
     pass_env: bool,
     show_log: bool,
     show_all: bool,
+    stats_output: Option<String>,
 ) -> Result<(), CommandError> {
     let bpf_bytes = export_bpf_filter(&ctx)?;
     let mut command = build_command(&path, pass_env);
     apply_seccomp_filter(&mut command, bpf_bytes);
 
     if show_log || show_all {
-        execute_with_monitoring(command)
+        execute_with_monitoring(command, stats_output)
     } else {
         execute_without_monitoring(command)
     }
@@ -191,7 +197,10 @@ fn execute_without_monitoring(mut command: Command) -> Result<(), CommandError> 
 // Execution With Monitoring
 // ============================================================================
 
-fn execute_with_monitoring(mut command: Command) -> Result<(), CommandError> {
+fn execute_with_monitoring(
+    mut command: Command,
+    stats_output: Option<String>,
+) -> Result<(), CommandError> {
     // Start the monitor
     let mut monitor = SeccompMonitor::new();
     info!("Starting seccomp monitor...\n");
@@ -219,11 +228,64 @@ fn execute_with_monitoring(mut command: Command) -> Result<(), CommandError> {
         event.print_event();
     }
 
+    if stats_output.is_some() {
+        write_detailed_stats(&monitor, stats_output)?;
+    }
+
     // Stop monitoring and print summary
     monitor.stop();
     monitor.stats().print_summary();
 
     handle_exit_status(status)
+}
+
+#[derive(Serialize, Deserialize)]
+struct DetailedStats {
+    by_syscall: HashMap<String, i64>,
+    total_events: i64,
+    tested_binaries: HashSet<String>,
+}
+
+fn write_detailed_stats(
+    monitor: &SeccompMonitor,
+    stats_output: Option<String>,
+) -> Result<(), CommandError> {
+    let output_path = stats_output.unwrap_or_else(|| "detailed-stats.json".to_string());
+    let mut stats: DetailedStats = if std::path::Path::new(&output_path).exists() {
+        let file = File::open(&output_path)?;
+        serde_json::from_reader(file).unwrap_or_else(|_| DetailedStats {
+            by_syscall: HashMap::new(),
+            total_events: 0,
+            tested_binaries: HashSet::new(),
+        })
+    } else {
+        DetailedStats {
+            by_syscall: HashMap::new(),
+            total_events: 0,
+            tested_binaries: HashSet::new(),
+        }
+    };
+
+    let new_stats = monitor.stats();
+    stats.total_events += new_stats.total_events as i64;
+
+    for (syscall_num, count) in &new_stats.by_syscall {
+        let syscall_name =
+            libseccomp::ScmpSyscall::from_raw_syscall(*syscall_num as i32).get_name();
+        let name = syscall_name.unwrap_or_else(|_| "UNKNOWN".to_string());
+        *stats.by_syscall.entry(name).or_insert(0) += *count as i64;
+    }
+
+    stats
+        .tested_binaries
+        .extend(new_stats.by_exe.keys().cloned());
+
+    let file = File::create(&output_path)?;
+    serde_json::to_writer_pretty(file, &stats)?;
+
+    info!("Detailed stats written to {}", output_path);
+
+    Ok(())
 }
 
 fn spawn_child(command: &mut Command) -> Result<u32, CommandError> {
