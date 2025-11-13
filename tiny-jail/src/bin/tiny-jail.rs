@@ -7,8 +7,7 @@ use tiny_jail::commands::{self, CommandError};
 use tiny_jail::filters::{self, ProfileError};
 
 // Cannot be in lib.rs due to circular dependency
-mod audisp;
-use audisp::AudispGuard;
+use tiny_jail::audisp::AudispGuard;
 
 #[derive(Error, Debug)]
 pub enum AppError {

@@ -1,4 +1,5 @@
 use log2::*;
+use macros::include_bytes_or;
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
@@ -26,7 +27,8 @@ const PLUGIN_PATH: &str = "/usr/local/sbin/";
 const PLUGIN_CONF_PATH: &str = "/etc/audit/plugins.d/";
 
 // Select the prebuilt blob for the current target.
-const PLUGIN_BYTES: &[u8] = include_bytes!("../target/release/audisp-plugin");
+const PLUGIN_BYTES: &[u8] =
+    include_bytes_or!("target/release/audisp-plugin", "target/debug/audisp-plugin");
 
 fn install_plugin() -> Result<(), String> {
     let output = Command::new("systemctl")
@@ -72,6 +74,7 @@ fn install_plugin() -> Result<(), String> {
         tmp_bin.to_str().unwrap(),
         &dest_path,
     ])?;
+    let _ = std::fs::remove_file(&tmp_bin);
 
     // Write the config file atomically with perms
     info!("Writing audisp plugin config...");
@@ -91,6 +94,7 @@ fn install_plugin() -> Result<(), String> {
         tmp_conf.to_str().unwrap(),
         &conf_file_path,
     ])?;
+    let _ = std::fs::remove_file(&tmp_conf);
 
     // Reload auditd configuration
     info!("Reloading auditd configuration...");
@@ -106,10 +110,6 @@ fn install_plugin() -> Result<(), String> {
         warn!("systemctl reload auditd.service failed: {}", stderr.trim());
         sudo_command(&["pkill", "-HUP", "auditd"])?;
     }
-
-    // 5) Cleanup temp files
-    let _ = std::fs::remove_file(&tmp_bin);
-    let _ = std::fs::remove_file(&tmp_conf);
 
     info!("Audisp plugin installed successfully.");
     Ok(())
