@@ -2,7 +2,7 @@ use log2::*;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -296,8 +296,8 @@ impl SeccompMonitor {
             return Err(MonitorError::AlreadyStarted);
         }
 
-        let (tx_events, rx_events) = channel();
-        let (tx_ready, rx_ready) = channel();
+        let (tx_events, rx_events) = mpsc::channel();
+        let (tx_ready, rx_ready) = mpsc::channel();
         let child_process = self.child_process.clone();
 
         let handle = thread::spawn(move || {

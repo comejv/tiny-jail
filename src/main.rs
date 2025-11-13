@@ -3,8 +3,8 @@ use log2::*;
 use thiserror::Error;
 
 use tiny_jail::actions::Action;
-use tiny_jail::commands::{filtered_exec, fuzz_exec, CommandError};
-use tiny_jail::filters::{load_profile, ProfileError};
+use tiny_jail::commands::{self, CommandError};
+use tiny_jail::filters::{self, ProfileError};
 
 // Cannot be in lib.rs due to circular dependency
 mod audisp;
@@ -173,7 +173,7 @@ fn run() -> Result<(), AppError> {
                 None
             };
 
-            let filter = load_profile(
+            let filter = filters::load_profile(
                 exec_args.profile,
                 exec_args.default_action,
                 exec_args.default_errno,
@@ -184,7 +184,7 @@ fn run() -> Result<(), AppError> {
 
             info!("Running the given command...");
             debug!("Command: {:?}", exec_args.exec);
-            filtered_exec(
+            commands::filtered_exec(
                 filter,
                 exec_args.exec,
                 cli.env,
@@ -196,7 +196,7 @@ fn run() -> Result<(), AppError> {
         Commands::Fuzz(fuzz_args) => {
             info!("Fuzzing the given command...");
             debug!("Command: {:?}", fuzz_args.exec);
-            fuzz_exec(fuzz_args.exec, cli.env)?;
+            commands::fuzz_exec(fuzz_args.exec, cli.env)?;
             info!("Fuzzing finished.");
         }
     }
