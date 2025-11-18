@@ -33,6 +33,10 @@ struct Cli {
     #[arg(short = 'e', long)]
     env: bool,
 
+    /// Batch mode
+    #[arg(short = 'b', long)]
+    batch: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -131,6 +135,10 @@ struct ExecArgs {
     #[arg(short = 'W', long = "watch-all-logs")]
     show_all: bool,
 
+    /// Output file for detailed statistics.
+    #[arg(long = "stats-output", value_name = "FILE")]
+    stats_output: Option<String>,
+
     /// The executable command to run and its arguments.
     ///
     /// To pass arguments to the executable that start with a hyphen, you must use `--`
@@ -139,10 +147,6 @@ struct ExecArgs {
     /// For example: `tiny-jail exec --profile p.json -- ls -l`
     #[arg(required = true, name = "EXECUTABLE_AND_ARGS", trailing_var_arg = true)]
     exec: Vec<String>,
-
-    /// Output file for detailed statistics.
-    #[arg(long = "stats-output", value_name = "FILE")]
-    stats_output: Option<String>,
 }
 
 fn main() {
@@ -157,19 +161,27 @@ fn run() -> Result<(), AppError> {
 
     let _log2 = log2::stdout()
         .module(cli.debug)
-        .level(if cli.debug { "debug" } else { "info" })
+        .level(if cli.debug {
+            "debug"
+        } else if cli.batch {
+            "error"
+        } else {
+            "info"
+        })
         .start();
 
     match cli.command {
         Commands::Exec(exec_args) => {
             let _guard = if exec_args.show_log || exec_args.show_all {
-                warn!("Getting log from auditd requires sudo, do you want to continue? [y/N]");
-                let mut input = String::new();
-                std::io::stdin()
-                    .read_line(&mut input)
-                    .map_err(|e| AppError::Audisp(format!("Failed to read input: {}", e)))?;
-                if !input.trim().eq_ignore_ascii_case("y") {
-                    return Ok(());
+                if !cli.batch {
+                    warn!("Getting log from auditd requires sudo, do you want to continue? [y/N]");
+                    let mut input = String::new();
+                    std::io::stdin()
+                        .read_line(&mut input)
+                        .map_err(|e| AppError::Audisp(format!("Failed to read input: {}", e)))?;
+                    if !input.trim().eq_ignore_ascii_case("y") {
+                        return Ok(());
+                    }
                 }
                 Some(AudispGuard::install().map_err(AppError::Audisp)?)
             } else {
@@ -194,6 +206,7 @@ fn run() -> Result<(), AppError> {
                 exec_args.show_log,
                 exec_args.show_all,
                 exec_args.stats_output,
+                cli.batch,
             )?;
             info!("Execution finished.");
         }

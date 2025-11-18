@@ -11,7 +11,7 @@ use std::io;
 #[cfg(not(libseccomp_2_6))]
 use std::io::Read;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 use thiserror::Error;
@@ -62,13 +62,14 @@ pub fn filtered_exec(
     show_log: bool,
     show_all: bool,
     stats_output: Option<String>,
+    batch_mode: bool,
 ) -> Result<(), CommandError> {
     let bpf_bytes = export_bpf_filter(&ctx)?;
     let mut command = build_command(&path, pass_env);
     apply_seccomp_filter(&mut command, bpf_bytes);
 
     if show_log || show_all {
-        execute_with_monitoring(command, stats_output)
+        execute_with_monitoring(command, stats_output, batch_mode)
     } else {
         execute_without_monitoring(command)
     }
@@ -201,6 +202,7 @@ fn execute_without_monitoring(mut command: Command) -> Result<(), CommandError> 
 fn execute_with_monitoring(
     mut command: Command,
     stats_output: Option<String>,
+    batch_mode: bool,
 ) -> Result<(), CommandError> {
     // Start the monitor
     let mut monitor = SeccompMonitor::new();
@@ -218,15 +220,17 @@ fn execute_with_monitoring(
     debug!("Child process spawned with PID: {}", child_pid);
 
     // Wait for child and collect events concurrently
-    let status = wait_and_collect_events(child_pid, &mut monitor)?;
+    let status = wait_and_collect_events(child_pid, &mut monitor, batch_mode)?;
 
     // Allow final events to arrive
     thread::sleep(Duration::from_millis(500));
 
     // Collect any remaining events
     let remaining_events = monitor.collect_events();
-    for event in remaining_events {
-        event.print_event();
+    if !batch_mode {
+        for event in remaining_events {
+            event.print_event();
+        }
     }
 
     if stats_output.is_some() {
@@ -235,7 +239,9 @@ fn execute_with_monitoring(
 
     // Stop monitoring and print summary
     monitor.stop();
-    monitor.stats().print_summary();
+    if !batch_mode {
+        monitor.stats().print_summary();
+    }
 
     handle_exit_status(status)
 }
@@ -243,7 +249,7 @@ fn execute_with_monitoring(
 #[derive(Serialize, Deserialize)]
 struct DetailedStats {
     by_syscall: HashMap<String, i64>,
-    total_events: i64,
+    total_runs: i64,
     tested_binaries: HashSet<String>,
 }
 
@@ -252,29 +258,30 @@ fn write_detailed_stats(
     stats_output: Option<String>,
 ) -> Result<(), CommandError> {
     let output_path = stats_output.unwrap_or_else(|| "detailed-stats.json".to_string());
+
     let mut stats: DetailedStats = if std::path::Path::new(&output_path).exists() {
         let file = File::open(&output_path)?;
         serde_json::from_reader(file).unwrap_or_else(|_| DetailedStats {
             by_syscall: HashMap::new(),
-            total_events: 0,
+            total_runs: 0,
             tested_binaries: HashSet::new(),
         })
     } else {
         DetailedStats {
             by_syscall: HashMap::new(),
-            total_events: 0,
+            total_runs: 0,
             tested_binaries: HashSet::new(),
         }
     };
 
     let new_stats = monitor.stats();
-    stats.total_events += new_stats.total_events as i64;
+    stats.total_runs += 1;
 
-    for (syscall_num, count) in &new_stats.by_syscall {
+    for syscall_num in new_stats.by_syscall.keys() {
         let syscall_name =
             libseccomp::ScmpSyscall::from_raw_syscall(*syscall_num as i32).get_name();
         let name = syscall_name.unwrap_or_else(|_| "UNKNOWN".to_string());
-        *stats.by_syscall.entry(name).or_insert(0) += *count as i64;
+        *stats.by_syscall.entry(name).or_insert(0) += 1;
     }
 
     stats
@@ -290,6 +297,7 @@ fn write_detailed_stats(
 }
 
 fn spawn_child(command: &mut Command) -> Result<u32, CommandError> {
+    command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
     let child = command.spawn()?;
     let pid = child.id();
 
@@ -304,6 +312,7 @@ fn spawn_child(command: &mut Command) -> Result<u32, CommandError> {
 fn wait_and_collect_events(
     child_pid: u32,
     monitor: &mut SeccompMonitor,
+    batch_mode: bool,
 ) -> Result<std::process::ExitStatus, CommandError> {
     // Spawn wait thread
     let (tx_status, rx_status) = std::sync::mpsc::channel();
@@ -331,8 +340,10 @@ fn wait_and_collect_events(
         }
 
         // Collect and print events
-        if let Some(event) = monitor.next_event(Duration::from_millis(100)) {
-            event.print_event();
+        if !batch_mode {
+            if let Some(event) = monitor.next_event(Duration::from_millis(100)) {
+                event.print_event();
+            }
         }
     }
 }
