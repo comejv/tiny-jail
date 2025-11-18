@@ -177,10 +177,6 @@ impl SeccompEvent {
         println!("│ Process: {} (PID: {})", self.comm, self.pid);
         println!("│ Executable: {}", self.exe);
         println!("│ Syscall: {}({})", self.syscall_name(), self.syscall);
-        println!(
-            "│ User: uid=REDACTED, gid={}, auid={}, ses={}",
-            self.gid, self.auid, self.ses
-        );
         println!("│ Action: {}", self.decoded_summary());
 
         if self.sig != 0 {
@@ -195,10 +191,6 @@ impl SeccompEvent {
         }
 
         println!("│ IP: {}", self.ip);
-        println!(
-            "│ Code: raw=0x{:08x} class=0x{:08x} data=0x{:04x}",
-            self.decoded.raw, self.decoded.class, self.decoded.data
-        );
         println!("│ Timestamp: {}", self.timestamp);
         println!("└─────────────────────────────────────────────────────┘\n");
     }
