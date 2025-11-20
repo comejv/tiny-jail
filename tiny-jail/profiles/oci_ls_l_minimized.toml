@@ -1,0 +1,24 @@
+default_action = "SCMP_ACT_ERRNO"
+default_errno_ret = 1
+architectures = ["SCMP_ARCH_X86_64"]
+
+[[syscalls]]
+names = [
+    "arch_prctl",
+    "close",
+    "execve",
+    "exit_group",
+    "fstat",
+    "futex",
+    "getdents64",
+    "lseek",
+    "mmap",
+    "mprotect",
+    "openat",
+    "pread64",
+    "read",
+    "statx",
+    "write",
+]
+action = "SCMP_ACT_ALLOW"
+conditions = []

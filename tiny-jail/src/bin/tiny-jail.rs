@@ -1,13 +1,13 @@
+use std::path::PathBuf;
+
 use clap::{ArgAction, Args, Parser, Subcommand};
 use log2::*;
 use thiserror::Error;
 
 use tiny_jail::actions::Action;
+use tiny_jail::audisp::AudispGuard;
 use tiny_jail::commands::{self, CommandError};
 use tiny_jail::filters::{self, ProfileError};
-
-// Cannot be in lib.rs due to circular dependency
-use tiny_jail::audisp::AudispGuard;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -53,6 +53,12 @@ enum Commands {
     ///
     /// This is the default mode if no other subcommand is specified.
     Exec(ExecArgs),
+
+    /// Reduce a profile to its minimum set of required syscalls.
+    ///
+    /// Uses delta debugging and greedy deletion strategies to efficiently
+    /// minimize the profile while maintaining correct behavior.
+    Reduce(ReduceArgs),
 }
 
 #[derive(Args, Debug)]
@@ -90,7 +96,7 @@ struct ExecArgs {
     /// Path to the profile file.
     ///
     /// This file is used for loading existing profiles or for generating new ones.
-    #[arg(long, value_name = "FILE")]
+    #[arg(short = 'p', long, value_name = "FILE")]
     profile: Option<String>,
 
     /// Default action for syscalls not specified in the profile.
@@ -137,7 +143,7 @@ struct ExecArgs {
 
     /// Output file for detailed statistics.
     #[arg(long = "stats-output", value_name = "FILE")]
-    stats_output: Option<String>,
+    stats_output: Option<PathBuf>,
 
     /// The executable command to run and its arguments.
     ///
@@ -145,6 +151,42 @@ struct ExecArgs {
     /// to separate the arguments for tiny-jail from the arguments for the executable.
     ///
     /// For example: `tiny-jail exec --profile p.json -- ls -l`
+    #[arg(required = true, name = "EXECUTABLE_AND_ARGS", trailing_var_arg = true)]
+    exec: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+struct ReduceArgs {
+    /// Input profile file to minimize.
+    #[arg(short = 'p', long, value_name = "PROFILE_FILE", required = true)]
+    profile: String,
+
+    /// Output file for the minimized profile.
+    ///
+    /// If not specified, will use '<input>_minimized.toml'.
+    #[arg(short = 'o', long, value_name = "OUTPUT_FILE")]
+    output: Option<String>,
+
+    /// Initial chunk size for partitioning (default: 2, meaning split in half).
+    ///
+    /// Smaller values = more aggressive initial reduction but more iterations.
+    #[arg(short = 'c', long, default_value_t = 2, value_name = "SIZE")]
+    initial_chunks: usize,
+
+    /// Include stderr in the comparison.
+    ///
+    /// This will increase the number of tests performed.
+    #[arg(short = 'e', long = "with-err")]
+    with_err: bool,
+
+    /// The executable command to run and its arguments.
+    ///
+    /// This command will be tested after each reduction to verify behavior.
+    ///
+    /// To pass arguments to the executable that start with a hyphen, you must use `--`
+    /// to separate the arguments for tiny-jail from the arguments for the executable.
+    ///
+    /// For example: `tiny-jail reduce -p profile.toml -- my-program --with-arg`
     #[arg(required = true, name = "EXECUTABLE_AND_ARGS", trailing_var_arg = true)]
     exec: Vec<String>,
 }
@@ -201,12 +243,13 @@ fn run() -> Result<(), AppError> {
             debug!("Command: {:?}", exec_args.exec);
             commands::filtered_exec(
                 filter,
-                exec_args.exec,
+                exec_args.exec.as_ref(),
                 cli.env,
                 exec_args.show_log,
                 exec_args.show_all,
-                exec_args.stats_output,
+                &exec_args.stats_output,
                 cli.batch,
+                false,
             )?;
             info!("Execution finished.");
         }
@@ -215,6 +258,31 @@ fn run() -> Result<(), AppError> {
             debug!("Command: {:?}", fuzz_args.exec);
             commands::fuzz_exec(fuzz_args.exec, cli.env)?;
             info!("Fuzzing finished.");
+        }
+        Commands::Reduce(reduce_args) => {
+            info!("Reducing profile to minimum...");
+            debug!("Input profile: {}", reduce_args.profile);
+            debug!("Command: {:?}", reduce_args.exec);
+
+            let output_file = reduce_args.output.clone().unwrap_or_else(|| {
+                let input = &reduce_args.profile;
+                if let Some(stem) = input.strip_suffix(".toml") {
+                    format!("{}_minimized.toml", stem)
+                } else {
+                    format!("{}_minimized.toml", input)
+                }
+            });
+
+            commands::reduce_profile(
+                reduce_args.profile,
+                output_file,
+                reduce_args.exec,
+                cli.env,
+                cli.batch,
+                reduce_args.initial_chunks,
+                reduce_args.with_err,
+            )?;
+            info!("Profile reduction finished.");
         }
     }
 

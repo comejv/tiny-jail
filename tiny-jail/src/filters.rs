@@ -3,7 +3,7 @@ use libseccomp::{
     ScmpSyscall,
 };
 use log2::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::str::FromStr;
@@ -40,6 +40,8 @@ pub enum ProfileError {
     CircularReference(String),
     #[error("Unknown abstract group: {0}")]
     UnknownGroup(String),
+    #[error("Abstract syscalls not expanded")]
+    AbstractNotExpanded,
 }
 
 // ============================================================================
@@ -92,7 +94,7 @@ const ABSTRACT_RULES_DATA: &str = include_str!("../data/abstract_rules.min.json"
 // Profile Structures
 // ============================================================================
 
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct OciSyscallCondition {
     index: u8,
     value: u64,
@@ -100,17 +102,17 @@ struct OciSyscallCondition {
     op: String,
 }
 
-#[derive(Deserialize, Debug)]
-struct OciSyscall {
-    names: Vec<String>,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct OciSyscall {
+    pub names: Vec<String>,
     action: Action,
     errno_ret: Option<u32>,
     #[serde(default)]
     conditions: Vec<OciSyscallCondition>,
 }
 
-#[derive(Deserialize, Debug)]
-struct AbstractSyscall {
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AbstractSyscall {
     names: Vec<String>,
     action: Action,
 }
@@ -119,19 +121,83 @@ fn default_architectures() -> Vec<String> {
     vec!["SCMP_ARCH_X86_64".to_string()]
 }
 
-#[derive(Deserialize, Debug)]
-struct OciSeccomp {
-    default_action: Action,
-    default_errno_ret: Option<u32>,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct OciSeccomp {
+    pub default_action: Action,
+    pub default_errno_ret: Option<u32>,
     #[serde(default = "default_architectures")]
-    architectures: Vec<String>,
-    syscalls: Option<Vec<OciSyscall>>,
-    abstract_syscalls: Option<Vec<AbstractSyscall>>,
+    pub architectures: Vec<String>,
+    pub syscalls: Option<Vec<OciSyscall>>,
+    pub abstract_syscalls: Option<Vec<AbstractSyscall>>,
 }
 
 // ============================================================================
 // Public API
 // ============================================================================
+
+/// Load a seccomp profile from a file and expand abstract syscalls to concrete ones.
+///
+/// # Arguments
+/// * `profile_path` - Path to the OCI seccomp profile TOML file
+///
+/// # Returns
+/// A modified `OciSeccomp` struct where all abstract syscalls have been expanded
+/// to their concrete syscall equivalents and merged with regular syscalls.
+pub fn read_and_expand_profile(profile_path: &str) -> Result<OciSeccomp, ProfileError> {
+    // Read and parse the profile file
+    debug!("Loading profile from: {}", profile_path);
+    let profile_content = fs::read_to_string(profile_path).map_err(|e| {
+        error!("Failed to read profile: {}", e);
+        ProfileError::FileRead(e)
+    })?;
+
+    let mut oci_seccomp: OciSeccomp = toml::from_str(&profile_content).map_err(|e| {
+        error!("Failed to parse profile: {}", e);
+        ProfileError::ProfileParse(e)
+    })?;
+
+    // Expand abstract syscalls if present
+    if let Some(abstract_syscalls) = oci_seccomp.abstract_syscalls.take() {
+        let abstract_groups =
+            serde_json::from_str::<AbstractGroups>(ABSTRACT_RULES_DATA).map_err(|e| {
+                error!("Failed to parse abstract rules: {}", e);
+                ProfileError::AbstractParse(e)
+            })?;
+
+        let mut expanded_syscalls: Vec<OciSyscall> = Vec::new();
+
+        for abstract_entry in abstract_syscalls {
+            for group_name in &abstract_entry.names {
+                debug!("Expanding abstract group: {}", group_name);
+                let expanded_rules =
+                    expand_group(group_name, &abstract_groups.groups, &mut HashSet::new())?;
+
+                for syscall_rule in expanded_rules {
+                    let oci_syscall =
+                        convert_syscall_rule_to_oci(&syscall_rule, abstract_entry.action)?;
+                    expanded_syscalls.push(oci_syscall);
+                }
+            }
+        }
+
+        // Merge expanded syscalls with existing ones
+        match oci_seccomp.syscalls {
+            Some(mut existing) => {
+                existing.extend(expanded_syscalls);
+                oci_seccomp.syscalls = Some(existing);
+            }
+            None => {
+                oci_seccomp.syscalls = Some(expanded_syscalls);
+            }
+        }
+    }
+
+    debug!(
+        "Profile loaded with {} syscall rules",
+        oci_seccomp.syscalls.as_ref().map(|s| s.len()).unwrap_or(0)
+    );
+    Ok(oci_seccomp)
+}
 
 /// Load and configure a seccomp filter profile.
 ///
@@ -152,24 +218,13 @@ pub fn load_profile(
 ) -> Result<ScmpFilterContext, ProfileError> {
     let mut ctx = if let Some(path) = profile_path {
         debug!("Parsing profile: {}", path);
-        match fs::read_to_string(path) {
-            Ok(profile_content) => match toml::from_str(&profile_content) {
-                Ok(oci_seccomp) => apply_profile(
-                    oci_seccomp,
-                    default_action_override,
-                    default_errno_ret_override,
-                    log_allowed,
-                )?,
-                Err(e) => {
-                    error!("Failed to parse profile: {}", e);
-                    return Err(ProfileError::ProfileParse(e));
-                }
-            },
-            Err(e) => {
-                error!("Failed to read profile: {}", e);
-                return Err(ProfileError::FileRead(e));
-            }
-        }
+        let profile = read_and_expand_profile(&path)?;
+        apply_profile(
+            &profile,
+            default_action_override,
+            default_errno_ret_override,
+            log_allowed,
+        )?
     } else if log_allowed {
         info!("No profile provided, using default action: Log");
         ScmpFilterContext::new(Action::Log.to_scmp_action(None)?)?
@@ -192,8 +247,8 @@ pub fn load_profile(
 // Profile Application
 // ============================================================================
 
-fn apply_profile(
-    oci_seccomp: OciSeccomp,
+pub fn apply_profile(
+    oci_seccomp: &OciSeccomp,
     default_action_override: Option<Action>,
     default_errno_ret_override: Option<u32>,
     log_allowed: bool,
@@ -239,13 +294,13 @@ fn add_architectures(
     Ok(())
 }
 
-fn apply_syscall_rules(
+pub fn apply_syscall_rules(
     ctx: &mut ScmpFilterContext,
-    raw_profile: OciSeccomp,
+    raw_profile: &OciSeccomp,
     log_allowed: bool,
 ) -> Result<(), ProfileError> {
-    let syscalls = raw_profile.syscalls;
-    let abstract_syscalls = raw_profile.abstract_syscalls;
+    let syscalls = &raw_profile.syscalls;
+    let abstract_syscalls = &raw_profile.abstract_syscalls;
 
     if syscalls.is_none() && abstract_syscalls.is_none() {
         let default_action = Action::from(ctx.get_act_default().unwrap_or(ScmpAction::Allow));
@@ -255,33 +310,109 @@ fn apply_syscall_rules(
 
     if let Some(syscalls) = syscalls {
         for syscall_entry in syscalls {
-            apply_syscall_rule(ctx, &syscall_entry, log_allowed)?;
+            apply_syscall_rule(ctx, syscall_entry, log_allowed)?;
         }
     }
 
-    if let Some(abstract_syscalls) = abstract_syscalls {
-        let abstract_groups =
-            serde_json::from_str::<AbstractGroups>(ABSTRACT_RULES_DATA).map_err(|e| {
-                error!("Failed to parse abstract rules: {}", e);
-                ProfileError::AbstractParse(e)
-            })?;
-
-        for abstract_entry in abstract_syscalls {
-            for group_name in &abstract_entry.names {
-                debug!("Expanding abstract group: {}", group_name);
-                let expanded_rules =
-                    expand_group(group_name, &abstract_groups.groups, &mut HashSet::new())?;
-
-                for syscall_rule in expanded_rules {
-                    let oci_syscall =
-                        convert_syscall_rule_to_oci(&syscall_rule, abstract_entry.action)?;
-                    apply_syscall_rule(ctx, &oci_syscall, log_allowed)?;
-                }
-            }
-        }
+    if abstract_syscalls.is_some() {
+        error!("Abstract syscalls should have been expanded by now");
+        return Err(ProfileError::AbstractNotExpanded);
     }
 
     Ok(())
+}
+
+pub fn explode_syscalls(profile: &mut OciSeccomp) {
+    let Some(syscalls) = profile.syscalls.take() else {
+        return;
+    };
+    let mut exploded = Vec::with_capacity(syscalls.len());
+    for sc in syscalls {
+        if sc.names.len() <= 1 {
+            exploded.push(sc);
+            continue;
+        }
+        for name in sc.names {
+            exploded.push(OciSyscall {
+                names: vec![name],
+                action: sc.action,
+                errno_ret: sc.errno_ret,
+                conditions: sc.conditions.clone(),
+            });
+        }
+    }
+    profile.syscalls = Some(exploded);
+}
+
+pub fn coalesce_rules_by_action(profile: &mut OciSeccomp) {
+    let Some(syscalls) = profile.syscalls.take() else {
+        return;
+    };
+
+    #[derive(Debug, Clone)]
+    struct Group {
+        action: Action,
+        errno: Option<u32>,
+        conds: Vec<OciSyscallCondition>,
+        names: Vec<String>,
+    }
+
+    let mut groups: Vec<Group> = Vec::new();
+
+    for sc in syscalls.into_iter() {
+        // Find an existing group with the same action/errno/conditions
+        let mut merged = false;
+        for g in groups.iter_mut() {
+            if g.action == sc.action
+                && g.errno == sc.errno_ret
+                && conditions_equal(&g.conds, &sc.conditions)
+            {
+                g.names.extend(sc.names.iter().cloned());
+                merged = true;
+                break;
+            }
+        }
+
+        if !merged {
+            groups.push(Group {
+                action: sc.action,
+                errno: sc.errno_ret,
+                conds: sc.conditions.clone(),
+                names: sc.names.clone(),
+            });
+        }
+    }
+
+    // Deduplicate and optionally sort names within each merged rule
+    for g in groups.iter_mut() {
+        g.names.sort();
+        g.names.dedup();
+    }
+
+    // Rebuild profile.syscalls
+    let merged: Vec<OciSyscall> = groups
+        .into_iter()
+        .map(|g| OciSyscall {
+            names: g.names,
+            action: g.action,
+            errno_ret: g.errno,
+            conditions: g.conds,
+        })
+        .collect();
+
+    profile.syscalls = Some(merged);
+}
+
+fn conditions_equal(a: &[OciSyscallCondition], b: &[OciSyscallCondition]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for (x, y) in a.iter().zip(b.iter()) {
+        if x.index != y.index || x.value != y.value || x.value_two != y.value_two || x.op != y.op {
+            return false;
+        }
+    }
+    true
 }
 
 fn expand_group(
