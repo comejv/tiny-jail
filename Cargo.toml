@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "tiny-jail",
-    "audisp-plugin", "macros",
+    "audisp-plugin",
+    "macros",
 ]
 resolver = "3"

@@ -8,3 +8,6 @@ description = "audisp plugin for tiny-jail"
 
 [dependencies]
 
+[[bin]]
+name = "audisp-plugin"
+path = "src/main.rs"
