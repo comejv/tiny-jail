@@ -1,6 +1,6 @@
 use clap::ValueEnum;
 use libseccomp::ScmpAction;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt::Display;
 use std::num::TryFromIntError;
@@ -14,30 +14,35 @@ pub enum ActionError {
     UnknownAction,
 }
 
-#[derive(ValueEnum, Clone, Copy, Debug, Deserialize, PartialEq, Eq, Hash, Default)]
+#[derive(ValueEnum, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 pub enum Action {
     #[default]
     #[clap(name = "kill")]
-    #[serde(alias = "SCMP_ACT_KILL_PROCESS", alias = "SCMP_ACT_KILL")]
+    #[serde(
+        rename = "SCMP_ACT_KILL_PROCESS",
+        alias = "SCMP_ACT_KILL",
+        alias = "KillProcess"
+    )]
     KillProcess,
     #[clap(name = "kill-thread")]
-    #[serde(alias = "SCMP_ACT_KILL_THREAD")]
+    #[serde(rename = "SCMP_ACT_KILL_THREAD", alias = "KillThread")]
     KillThread,
     #[clap(name = "trap")]
-    #[serde(alias = "SCMP_ACT_TRAP")]
+    #[serde(rename = "SCMP_ACT_TRAP", alias = "Trap")]
     Trap,
     #[clap(name = "errno")]
-    #[serde(alias = "SCMP_ACT_ERRNO")]
+    #[serde(rename = "SCMP_ACT_ERRNO", alias = "Errno")]
     Errno,
     #[clap(name = "trace")]
-    #[serde(alias = "SCMP_ACT_TRACE")]
+    #[serde(rename = "SCMP_ACT_TRACE", alias = "Trace")]
     Trace,
     #[clap(name = "allow")]
-    #[serde(alias = "SCMP_ACT_ALLOW")]
+    #[serde(rename = "SCMP_ACT_ALLOW", alias = "Allow")]
     Allow,
     #[clap(name = "log")]
-    #[serde(alias = "SCMP_ACT_LOG")]
+    #[serde(rename = "SCMP_ACT_LOG", alias = "Log")]
     Log,
+    #[serde(other)]
     Unknown,
 }
 
