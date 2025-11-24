@@ -242,16 +242,16 @@ fn run() -> Result<(), AppError> {
 
             info!("Running the given command...");
             debug!("Command: {:?}", exec_args.exec);
-            commands::filtered_exec(
-                filter,
-                exec_args.exec.as_ref(),
-                cli.env,
-                exec_args.show_log,
-                exec_args.show_all,
-                &exec_args.stats_output,
-                cli.batch,
-                false,
-            )?;
+            let options = tiny_jail::options::FilteredExecOptions {
+                path: exec_args.exec.as_ref(),
+                pass_env: cli.env,
+                show_log: exec_args.show_log,
+                show_all: exec_args.show_all,
+                stats_output: &exec_args.stats_output,
+                batch_mode: cli.batch,
+                capture_output: false,
+            };
+            commands::filtered_exec(filter, &options)?;
             info!("Execution finished.");
         }
         Commands::Fuzz(fuzz_args) => {
@@ -274,15 +274,16 @@ fn run() -> Result<(), AppError> {
                 }
             });
 
-            commands::reduce_profile(
-                reduce_args.profile,
+            let options = tiny_jail::options::ReduceProfileOptions {
+                input_profile: reduce_args.profile,
                 output_file,
-                reduce_args.exec,
-                cli.env,
-                cli.batch,
-                reduce_args.initial_chunks,
-                reduce_args.with_err,
-            )?;
+                exec_cmd: reduce_args.exec,
+                env: cli.env,
+                batch: cli.batch,
+                initial_chunks: reduce_args.initial_chunks,
+                with_err: reduce_args.with_err,
+            };
+            commands::reduce_profile(options)?;
             info!("Profile reduction finished.");
         }
     }

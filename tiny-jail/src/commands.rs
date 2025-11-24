@@ -20,6 +20,7 @@ use std::time::Duration;
 use crate::error::JailError;
 use crate::io::{capture_and_display_stream, CapturedOutput};
 use crate::monitor::SeccompMonitor;
+use crate::options::{FilteredExecOptions, ReduceProfileOptions};
 use crate::reduce;
 
 // ============================================================================
@@ -30,29 +31,19 @@ use crate::reduce;
 ///
 /// # Arguments
 /// * `ctx` - The seccomp filter context to apply
-/// * `path` - Command and arguments to execute
-/// * `pass_env` - Whether to pass environment variables to the child
-/// * `show_log` - Whether to show seccomp event logs
-/// * `show_all` - Whether to show all events (implies show_log)
-/// * `stats_output` - Path to write detailed stats to
+/// * `options` - Options for the execution
 pub fn filtered_exec(
     ctx: ScmpFilterContext,
-    path: &[String],
-    pass_env: bool,
-    show_log: bool,
-    show_all: bool,
-    stats_output: &Option<PathBuf>,
-    batch_mode: bool,
-    capture_output: bool,
+    options: &FilteredExecOptions,
 ) -> Result<Option<CapturedOutput>, JailError> {
     let bpf_bytes = export_bpf_filter(&ctx)?;
-    let mut command = build_command(path, pass_env, capture_output);
+    let mut command = build_command(options.path, options.pass_env, options.capture_output);
     apply_seccomp_filter(&mut command, bpf_bytes);
 
-    if show_log || show_all {
-        execute_with_monitoring(command, stats_output, batch_mode)?;
+    if options.show_log || options.show_all {
+        execute_with_monitoring(command, options.stats_output, options.batch_mode)?;
         Ok(None)
-    } else if capture_output {
+    } else if options.capture_output {
         execute_with_capture(command).map(Some)
     } else {
         execute_without_monitoring(command)?;
@@ -456,24 +447,8 @@ fn get_signal_name(signal: i32) -> String {
 // REDUCE PROFILE
 // ============================================================================
 
-pub fn reduce_profile(
-    input_profile: String,
-    output_file: String,
-    exec_cmd: Vec<String>,
-    env: bool,
-    batch: bool,
-    initial_chunks: usize,
-    with_err: bool,
-) -> Result<(), JailError> {
-    reduce::reduce_profile(
-        input_profile,
-        output_file,
-        exec_cmd,
-        env,
-        batch,
-        initial_chunks,
-        with_err,
-    )
+pub fn reduce_profile(options: ReduceProfileOptions) -> Result<(), JailError> {
+    reduce::reduce_profile(options)
 }
 
 // ============================================================================

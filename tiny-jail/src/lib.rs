@@ -5,4 +5,5 @@ pub mod error;
 pub mod filters;
 pub mod io;
 pub mod monitor;
+pub mod options;
 pub mod reduce;
