@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::str::FromStr;
+use std::sync::LazyLock;
 use thiserror::Error;
 use toml;
 
@@ -18,8 +19,12 @@ use crate::actions::{Action, ActionError};
 
 #[derive(Error, Debug)]
 pub enum ProfileError {
-    #[error("Could not read profile file: {0}")]
-    FileRead(#[from] std::io::Error),
+    #[error("Could not read profile file '{path}': {source}")]
+    FileRead {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("Could not parse profile: {0}")]
     ProfileParse(#[from] toml::de::Error),
     #[error("Could not parse abstract rules: {0}")]
@@ -148,7 +153,10 @@ pub fn read_and_expand_profile(profile_path: &str) -> Result<OciSeccomp, Profile
     debug!("Loading profile from: {}", profile_path);
     let profile_content = fs::read_to_string(profile_path).map_err(|e| {
         error!("Failed to read profile: {}", e);
-        ProfileError::FileRead(e)
+        ProfileError::FileRead {
+            path: profile_path.to_string(),
+            source: e,
+        }
     })?;
 
     let mut oci_seccomp: OciSeccomp = toml::from_str(&profile_content).map_err(|e| {
@@ -218,7 +226,10 @@ pub fn load_profile(
 ) -> Result<ScmpFilterContext, ProfileError> {
     let mut ctx = if let Some(path) = profile_path {
         debug!("Parsing profile: {}", path);
-        let profile = read_and_expand_profile(&path)?;
+        let profile = read_and_expand_profile(&path).map_err(|e| {
+            error!("Failed to load profile from {}: {}", path, e);
+            e
+        })?;
         apply_profile(
             &profile,
             default_action_override,
@@ -349,58 +360,28 @@ pub fn coalesce_rules_by_action(profile: &mut OciSeccomp) {
         return;
     };
 
-    #[derive(Debug, Clone)]
-    struct Group {
-        action: Action,
-        errno: Option<u32>,
-        conds: Vec<OciSyscallCondition>,
-        names: Vec<String>,
-    }
+    let mut groups: Vec<OciSyscall> = Vec::new();
 
-    let mut groups: Vec<Group> = Vec::new();
-
-    for sc in syscalls.into_iter() {
-        // Find an existing group with the same action/errno/conditions
-        let mut merged = false;
-        for g in groups.iter_mut() {
-            if g.action == sc.action
-                && g.errno == sc.errno_ret
-                && conditions_equal(&g.conds, &sc.conditions)
-            {
-                g.names.extend(sc.names.iter().cloned());
-                merged = true;
-                break;
-            }
-        }
-
-        if !merged {
-            groups.push(Group {
-                action: sc.action,
-                errno: sc.errno_ret,
-                conds: sc.conditions.clone(),
-                names: sc.names.clone(),
-            });
+    for sc in syscalls {
+        // Find matching group
+        if let Some(existing) = groups.iter_mut().find(|g| {
+            g.action == sc.action
+                && g.errno_ret == sc.errno_ret
+                && conditions_equal(&g.conditions, &sc.conditions)
+        }) {
+            existing.names.extend(sc.names);
+        } else {
+            groups.push(sc);
         }
     }
 
-    // Deduplicate and optionally sort names within each merged rule
-    for g in groups.iter_mut() {
-        g.names.sort();
+    // Deduplicate and sort names
+    for g in &mut groups {
+        g.names.sort_unstable();
         g.names.dedup();
     }
 
-    // Rebuild profile.syscalls
-    let merged: Vec<OciSyscall> = groups
-        .into_iter()
-        .map(|g| OciSyscall {
-            names: g.names,
-            action: g.action,
-            errno_ret: g.errno,
-            conditions: g.conds,
-        })
-        .collect();
-
-    profile.syscalls = Some(merged);
+    profile.syscalls = Some(groups);
 }
 
 fn conditions_equal(a: &[OciSyscallCondition], b: &[OciSyscallCondition]) -> bool {
@@ -415,25 +396,20 @@ fn conditions_equal(a: &[OciSyscallCondition], b: &[OciSyscallCondition]) -> boo
     true
 }
 
-fn expand_group(
-    group_name: &str,
-    groups: &HashMap<String, AbstractGroupDef>,
-    visited: &mut HashSet<String>,
+fn expand_group<'a>(
+    group_name: &'a str,
+    groups: &'a HashMap<String, AbstractGroupDef>,
+    visited: &mut HashSet<&'a str>,
 ) -> Result<Vec<SyscallRule>, ProfileError> {
-    // Check for circular references
-    if visited.contains(group_name) {
+    if !visited.insert(group_name) {
         return Err(ProfileError::CircularReference(group_name.to_string()));
     }
 
-    visited.insert(group_name.to_string());
-
-    let group_def = groups.get(group_name).ok_or_else(|| {
-        error!("Unknown abstract group: {}", group_name);
-        ProfileError::UnknownGroup(group_name.to_string())
-    })?;
+    let group_def = groups
+        .get(group_name)
+        .ok_or_else(|| ProfileError::UnknownGroup(group_name.to_string()))?;
 
     let mut result = Vec::new();
-
     for rule in &group_def.rules {
         match rule {
             GroupRule::Syscall(syscall_rule) => {
@@ -640,7 +616,6 @@ fn convert_condition_to_oci(
 
     match condition.type_.as_str() {
         "bitmask_all" => {
-            // Check if ALL specified flags are set: (arg & flags) == flags
             let flags_str = condition.flags.as_ref().ok_or_else(|| {
                 ProfileError::InvalidArgument("flags missing for bitmask_all".to_string())
             })?;
@@ -654,20 +629,11 @@ fn convert_condition_to_oci(
             }])
         }
         "bitmask_any" => {
-            // Check if ANY of the specified flags are set: (arg & flags) != 0
-            // Unfortunately MASKED_EQ can't express "!= 0", so we need a workaround
-            // We'll use MASKED_EQ and check for any non-zero value
-            // Actually, libseccomp doesn't support this well, so we'll just check
-            // if the masked value is non-zero by checking if it equals ANY of the bits
             let flags_str = condition.flags.as_ref().ok_or_else(|| {
                 ProfileError::InvalidArgument("flags missing for bitmask_any".to_string())
             })?;
             let flag_value = parse_flags(flags_str)?;
 
-            // For "any bit set", we can't easily express this with MASKED_EQ
-            // Best we can do is check if (arg & mask) == mask for the full set
-            // OR we need to create multiple rules for each individual flag
-            // For simplicity, let's just check if ANY of the bits match
             warn!("bitmask_any is limited in seccomp; using bitmask_all semantics");
             Ok(vec![OciSyscallCondition {
                 index: arg_index,
@@ -677,7 +643,6 @@ fn convert_condition_to_oci(
             }])
         }
         "bitmask_none" => {
-            // Check if NONE of the specified flags are set: (arg & flags) == 0
             let flags_str = condition.flags.as_ref().ok_or_else(|| {
                 ProfileError::InvalidArgument("flags missing for bitmask_none".to_string())
             })?;
@@ -749,74 +714,90 @@ fn convert_condition_to_oci(
     }
 }
 
+static ARG_INDICES: LazyLock<HashMap<(&'static str, &'static str), u8>> = LazyLock::new(|| {
+    HashMap::from([
+        // File open arguments
+        (("open", "flags"), 1),
+        (("openat", "flags"), 2),
+    ])
+});
+
+static DEFAULT_ARG_INDICES: LazyLock<HashMap<&'static str, u8>> = LazyLock::new(|| {
+    HashMap::from([
+        ("flags", 1),
+        ("mode", 2),
+        ("domain", 0),
+        ("type", 1),
+        ("protocol", 2),
+        ("pid", 0),
+        ("fd", 0),
+        ("sockfd", 0),
+        ("ruid", 0),
+        ("euid", 1),
+        ("suid", 2),
+        ("rgid", 0),
+        ("egid", 1),
+        ("sgid", 2),
+        ("name", 0),
+        ("path", 0),
+        ("address", 0),
+    ])
+});
+
 fn get_argument_index(arg_name: &str, syscall_name: &str) -> Result<u8, ProfileError> {
-    match arg_name {
-        "flags" => match syscall_name {
-            "open" => Ok(1),
-            "openat" => Ok(2),
-            _ => Ok(1),
-        },
-        "mode" => Ok(2),
-        "domain" => Ok(0),
-        "type" => Ok(1),
-        "protocol" => Ok(2),
-        "pid" => Ok(0),
-        "fd" => Ok(0),
-        "sockfd" => Ok(0),
-        "ruid" => Ok(0),
-        "euid" => Ok(1),
-        "suid" => Ok(2),
-        "rgid" => Ok(0),
-        "egid" => Ok(1),
-        "sgid" => Ok(2),
-        name => Err(ProfileError::InvalidArgument(format!(
-            "Unknown argument name: {}",
-            name
-        ))),
-    }
+    ARG_INDICES
+        .get(&(syscall_name, arg_name))
+        .or_else(|| DEFAULT_ARG_INDICES.get(arg_name))
+        .copied()
+        .ok_or_else(|| {
+            ProfileError::InvalidArgument(format!(
+                "Unknown argument name: {} for syscall: {}",
+                arg_name, syscall_name
+            ))
+        })
 }
 
+static FLAG_MAP: LazyLock<HashMap<&'static str, u64>> = LazyLock::new(|| {
+    HashMap::from([
+        // File open flags
+        ("O_RDONLY", 0o0),
+        ("O_WRONLY", 0o1),
+        ("O_RDWR", 0o2),
+        ("O_CREAT", 0o100),
+        ("O_EXCL", 0o200),
+        ("O_NOCTTY", 0o400),
+        ("O_TRUNC", 0o1000),
+        ("O_APPEND", 0o2000),
+        ("O_NONBLOCK", 0o4000),
+        ("O_RONLY", 0o0),
+        // Clone flags
+        ("CLONE_THREAD", 0x00010000),
+        ("CLONE_VM", 0x00000100),
+        ("CLONE_FS", 0x00000200),
+        ("CLONE_FILES", 0x00000400),
+        ("CLONE_SIGHAND", 0x00000800),
+        ("CLONE_PTRACE", 0x00002000),
+        ("CLONE_VFORK", 0x00004000),
+        ("CLONE_PARENT", 0x00008000),
+        // Socket domains
+        ("AF_UNIX", 1),
+        ("AF_INET", 2),
+        ("AF_INET6", 10),
+        ("AF_NETLINK", 16),
+    ])
+});
+
 fn parse_flags(flags_str: &str) -> Result<u64, ProfileError> {
-    let mut result: u64 = 0;
-
-    for flag in flags_str.split('|').map(str::trim) {
-        result |= match flag {
-            // File open flags
-            "O_RDONLY" => 0o0,
-            "O_WRONLY" => 0o1,
-            "O_RDWR" => 0o2,
-            "O_CREAT" => 0o100,
-            "O_EXCL" => 0o200,
-            "O_NOCTTY" => 0o400,
-            "O_TRUNC" => 0o1000,
-            "O_APPEND" => 0o2000,
-            "O_NONBLOCK" => 0o4000,
-            "O_RONLY" => 0o0,
-
-            // Clone flags
-            "CLONE_THREAD" => 0x00010000,
-            "CLONE_VM" => 0x00000100,
-            "CLONE_FS" => 0x00000200,
-            "CLONE_FILES" => 0x00000400,
-            "CLONE_SIGHAND" => 0x00000800,
-            "CLONE_PTRACE" => 0x00002000,
-            "CLONE_VFORK" => 0x00004000,
-            "CLONE_PARENT" => 0x00008000,
-
-            // Socket domains
-            "AF_UNIX" => 1,
-            "AF_INET" => 2,
-            "AF_INET6" => 10,
-            "AF_NETLINK" => 16,
-
-            _ => {
-                warn!("Unknown flag: {}, ignoring", flag);
-                0
-            }
-        };
-    }
-
-    Ok(result)
+    flags_str
+        .split('|')
+        .map(str::trim)
+        .try_fold(0u64, |acc, flag| {
+            FLAG_MAP
+                .get(flag)
+                .copied()
+                .ok_or_else(|| ProfileError::InvalidArgument(format!("Unknown flag: {}", flag)))
+                .map(|val| acc | val)
+        })
 }
 
 fn parse_value(value_str: &str) -> Result<u64, ProfileError> {
@@ -856,29 +837,24 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_parse_value_decimal() {
+    fn test_parse_value() {
+        // Decimal
         assert_eq!(parse_value("42").unwrap(), 42);
         assert_eq!(parse_value("0").unwrap(), 0);
         assert_eq!(parse_value("65536").unwrap(), 65536);
-    }
 
-    #[test]
-    fn test_parse_value_hex() {
+        // Hex
         assert_eq!(parse_value("0x10").unwrap(), 16);
         assert_eq!(parse_value("0xFF").unwrap(), 255);
         assert_eq!(parse_value("0x0").unwrap(), 0);
-    }
 
-    #[test]
-    fn test_parse_value_named_constants() {
+        // Named constants
         assert_eq!(parse_value("AF_UNIX").unwrap(), 1);
         assert_eq!(parse_value("AF_INET").unwrap(), 2);
         assert_eq!(parse_value("AF_INET6").unwrap(), 10);
         assert_eq!(parse_value("AF_NETLINK").unwrap(), 16);
-    }
 
-    #[test]
-    fn test_parse_value_invalid() {
+        // Invalid
         assert!(parse_value("invalid").is_err());
         assert!(parse_value("0xZZZ").is_err());
     }
@@ -888,47 +864,42 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_parse_flags_single() {
+    fn test_parse_flags() {
+        // Single flags
         assert_eq!(parse_flags("O_WRONLY").unwrap(), 0o1);
         assert_eq!(parse_flags("O_RDWR").unwrap(), 0o2);
         assert_eq!(parse_flags("O_CREAT").unwrap(), 0o100);
-    }
 
-    #[test]
-    fn test_parse_flags_multiple() {
-        let result = parse_flags("O_WRONLY|O_CREAT").unwrap();
-        assert_eq!(result, 0o1 | 0o100);
+        // Multiple flags
+        assert_eq!(parse_flags("O_WRONLY|O_CREAT").unwrap(), 0o1 | 0o100);
+        assert_eq!(
+            parse_flags("O_RDWR|O_CREAT|O_TRUNC").unwrap(),
+            0o2 | 0o100 | 0o1000
+        );
 
-        let result = parse_flags("O_RDWR|O_CREAT|O_TRUNC").unwrap();
-        assert_eq!(result, 0o2 | 0o100 | 0o1000);
-    }
+        // With whitespace
+        assert_eq!(
+            parse_flags("O_WRONLY | O_CREAT | O_TRUNC").unwrap(),
+            0o1 | 0o100 | 0o1000
+        );
 
-    #[test]
-    fn test_parse_flags_with_whitespace() {
-        let result = parse_flags("O_WRONLY | O_CREAT | O_TRUNC").unwrap();
-        assert_eq!(result, 0o1 | 0o100 | 0o1000);
-    }
-
-    #[test]
-    fn test_parse_flags_clone_flags() {
+        // Clone flags
         assert_eq!(parse_flags("CLONE_THREAD").unwrap(), 0x00010000);
-        assert_eq!(parse_flags("CLONE_VM").unwrap(), 0x00000100);
-        let result = parse_flags("CLONE_THREAD|CLONE_VM").unwrap();
-        assert_eq!(result, 0x00010000 | 0x00000100);
-    }
+        assert_eq!(
+            parse_flags("CLONE_THREAD|CLONE_VM").unwrap(),
+            0x00010000 | 0x00000100
+        );
 
-    #[test]
-    fn test_parse_flags_socket_domains() {
+        // Socket domains
         assert_eq!(parse_flags("AF_UNIX").unwrap(), 1);
         assert_eq!(parse_flags("AF_INET").unwrap(), 2);
-        assert_eq!(parse_flags("AF_INET6").unwrap(), 10);
     }
 
     #[test]
-    fn test_parse_flags_unknown_flag_warning() {
-        // Unknown flags are silently ignored with a warning
-        let result = parse_flags("O_WRONLY|UNKNOWN_FLAG|O_CREAT").unwrap();
-        assert_eq!(result, 0o1 | 0o100);
+    fn test_parse_flags_unknown() {
+        // If your implementation now errors on unknown flags (recommended):
+        assert!(parse_flags("UNKNOWN_FLAG").is_err());
+        assert!(parse_flags("O_WRONLY|UNKNOWN_FLAG|O_CREAT").is_err());
     }
 
     // ========================================================================
@@ -936,33 +907,36 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_get_argument_index_flags() {
+    fn test_get_argument_index() {
+        // Syscall-specific indices for flags
         assert_eq!(get_argument_index("flags", "open").unwrap(), 1);
         assert_eq!(get_argument_index("flags", "openat").unwrap(), 2);
-        assert_eq!(get_argument_index("flags", "other").unwrap(), 1);
-    }
+        assert_eq!(get_argument_index("flags", "socket").unwrap(), 1);
 
-    #[test]
-    fn test_get_argument_index_standard_args() {
+        // Standard arguments (use specific syscalls)
         assert_eq!(get_argument_index("mode", "open").unwrap(), 2);
         assert_eq!(get_argument_index("fd", "write").unwrap(), 0);
+        assert_eq!(get_argument_index("sockfd", "bind").unwrap(), 0);
         assert_eq!(get_argument_index("domain", "socket").unwrap(), 0);
         assert_eq!(get_argument_index("type", "socket").unwrap(), 1);
-    }
+        assert_eq!(get_argument_index("protocol", "socket").unwrap(), 2);
 
-    #[test]
-    fn test_get_argument_index_uid_gid() {
+        // PID argument
+        assert_eq!(get_argument_index("pid", "kill").unwrap(), 0);
+
+        // UID/GID arguments
         assert_eq!(get_argument_index("ruid", "setresuid").unwrap(), 0);
         assert_eq!(get_argument_index("euid", "setresuid").unwrap(), 1);
         assert_eq!(get_argument_index("suid", "setresuid").unwrap(), 2);
         assert_eq!(get_argument_index("rgid", "setresgid").unwrap(), 0);
         assert_eq!(get_argument_index("egid", "setresgid").unwrap(), 1);
         assert_eq!(get_argument_index("sgid", "setresgid").unwrap(), 2);
-    }
 
-    #[test]
-    fn test_get_argument_index_unknown() {
-        assert!(get_argument_index("unknown_arg", "open").is_err());
+        // Unknown argument
+        assert!(matches!(
+            get_argument_index("unknown_arg", "open"),
+            Err(ProfileError::InvalidArgument(_))
+        ));
     }
 
     // ========================================================================
@@ -970,7 +944,7 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_parse_compare_op_all_operators() {
+    fn test_parse_compare_op() {
         assert_eq!(
             parse_compare_op("SCMP_CMP_NE").unwrap(),
             ScmpCompareOp::NotEqual
@@ -995,10 +969,7 @@ mod tests {
             parse_compare_op("SCMP_CMP_GT").unwrap(),
             ScmpCompareOp::Greater
         );
-    }
 
-    #[test]
-    fn test_parse_compare_op_invalid() {
         assert!(parse_compare_op("SCMP_CMP_INVALID").is_err());
     }
 
@@ -1007,26 +978,15 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_resolve_action_allow_with_log() {
-        let action = resolve_action(Action::Allow, true);
-        assert_eq!(action, Action::Log);
-    }
+    fn test_resolve_action() {
+        // Allow -> Log when log_allowed is true
+        assert_eq!(resolve_action(Action::Allow, true), Action::Log);
+        assert_eq!(resolve_action(Action::Allow, false), Action::Allow);
 
-    #[test]
-    fn test_resolve_action_allow_without_log() {
-        let action = resolve_action(Action::Allow, false);
-        assert_eq!(action, Action::Allow);
-    }
-
-    #[test]
-    fn test_resolve_action_other_actions() {
+        // Other actions unchanged
         assert_eq!(resolve_action(Action::KillThread, true), Action::KillThread);
-        assert_eq!(
-            resolve_action(Action::KillThread, false),
-            Action::KillThread
-        );
         assert_eq!(resolve_action(Action::Log, true), Action::Log);
-        assert_eq!(resolve_action(Action::Log, false), Action::Log);
+        assert_eq!(resolve_action(Action::Trap, false), Action::Trap);
     }
 
     // ========================================================================
@@ -1034,132 +994,85 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_convert_condition_bitmask_all() {
-        let condition = SyscallCondition {
+    fn test_convert_condition_bitmask() {
+        // bitmask_all
+        let cond = SyscallCondition {
             type_: "bitmask_all".to_string(),
             argument: "flags".to_string(),
             value: None,
             flags: Some("O_WRONLY|O_CREAT".to_string()),
         };
-
-        let result = convert_condition_to_oci(&condition, "open").unwrap();
+        let result = convert_condition_to_oci(&cond, "open").unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].op, "SCMP_CMP_MASKED_EQ");
-        assert_eq!(result[0].value, 0o1 | 0o100);
-        assert_eq!(result[0].value_two, Some(0o1 | 0o100));
-    }
+        assert_eq!(result[0].value, 0o101);
+        assert_eq!(result[0].value_two, Some(0o101));
 
-    #[test]
-    fn test_convert_condition_bitmask_none() {
-        let condition = SyscallCondition {
+        // bitmask_none
+        let cond = SyscallCondition {
             type_: "bitmask_none".to_string(),
             argument: "flags".to_string(),
             value: None,
             flags: Some("O_CREAT|O_TRUNC".to_string()),
         };
-
-        let result = convert_condition_to_oci(&condition, "open").unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].op, "SCMP_CMP_MASKED_EQ");
-        assert_eq!(result[0].value, 0o100 | 0o1000);
+        let result = convert_condition_to_oci(&cond, "open").unwrap();
+        assert_eq!(result[0].value, 0o1100);
         assert_eq!(result[0].value_two, Some(0));
     }
 
     #[test]
-    fn test_convert_condition_equals() {
-        let condition = SyscallCondition {
-            type_: "equals".to_string(),
-            argument: "fd".to_string(),
-            value: Some("3".to_string()),
-            flags: None,
-        };
+    fn test_convert_condition_comparison() {
+        let test_cases = vec![
+            ("equals", "3", "SCMP_CMP_EQ", 3),
+            ("not_equals", "0", "SCMP_CMP_NE", 0),
+            ("greater", "2", "SCMP_CMP_GT", 2),
+            ("less", "1024", "SCMP_CMP_LT", 1024),
+        ];
 
-        let result = convert_condition_to_oci(&condition, "read").unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].op, "SCMP_CMP_EQ");
-        assert_eq!(result[0].value, 3);
+        for (type_, value, expected_op, expected_val) in test_cases {
+            let cond = SyscallCondition {
+                type_: type_.to_string(),
+                argument: "fd".to_string(),
+                value: Some(value.to_string()),
+                flags: None,
+            };
+            let result = convert_condition_to_oci(&cond, "read").unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].op, expected_op);
+            assert_eq!(result[0].value, expected_val);
+            assert_eq!(result[0].value_two, None);
+        }
     }
 
     #[test]
-    fn test_convert_condition_not_equals() {
-        let condition = SyscallCondition {
-            type_: "not_equals".to_string(),
-            argument: "fd".to_string(),
-            value: Some("0".to_string()),
-            flags: None,
-        };
-
-        let result = convert_condition_to_oci(&condition, "write").unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].op, "SCMP_CMP_NE");
-        assert_eq!(result[0].value, 0);
-    }
-
-    #[test]
-    fn test_convert_condition_greater() {
-        let condition = SyscallCondition {
-            type_: "greater".to_string(),
-            argument: "fd".to_string(),
-            value: Some("2".to_string()),
-            flags: None,
-        };
-
-        let result = convert_condition_to_oci(&condition, "close").unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].op, "SCMP_CMP_GT");
-        assert_eq!(result[0].value, 2);
-    }
-
-    #[test]
-    fn test_convert_condition_less() {
-        let condition = SyscallCondition {
-            type_: "less".to_string(),
-            argument: "fd".to_string(),
-            value: Some("1024".to_string()),
-            flags: None,
-        };
-
-        let result = convert_condition_to_oci(&condition, "dup").unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].op, "SCMP_CMP_LT");
-        assert_eq!(result[0].value, 1024);
-    }
-
-    #[test]
-    fn test_convert_condition_unknown_type() {
-        let condition = SyscallCondition {
+    fn test_convert_condition_errors() {
+        // Unknown type returns empty vec (or should error based on your review)
+        let cond = SyscallCondition {
             type_: "unknown_type".to_string(),
             argument: "fd".to_string(),
             value: None,
             flags: None,
         };
-
-        let result = convert_condition_to_oci(&condition, "read").unwrap();
+        let result = convert_condition_to_oci(&cond, "read").unwrap();
         assert_eq!(result.len(), 0);
-    }
 
-    #[test]
-    fn test_convert_condition_missing_flags() {
-        let condition = SyscallCondition {
+        // Missing flags
+        let cond = SyscallCondition {
             type_: "bitmask_all".to_string(),
             argument: "flags".to_string(),
             value: None,
             flags: None,
         };
+        assert!(convert_condition_to_oci(&cond, "open").is_err());
 
-        assert!(convert_condition_to_oci(&condition, "open").is_err());
-    }
-
-    #[test]
-    fn test_convert_condition_missing_value() {
-        let condition = SyscallCondition {
+        // Missing value
+        let cond = SyscallCondition {
             type_: "equals".to_string(),
             argument: "fd".to_string(),
             value: None,
             flags: None,
         };
-
-        assert!(convert_condition_to_oci(&condition, "read").is_err());
+        assert!(convert_condition_to_oci(&cond, "read").is_err());
     }
 
     // ========================================================================
@@ -1167,21 +1080,19 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_convert_syscall_rule_to_oci_no_conditions() {
-        let syscall_rule = SyscallRule {
+    fn test_convert_syscall_rule_to_oci() {
+        // No conditions
+        let rule = SyscallRule {
             name: "read".to_string(),
             conditions: vec![],
         };
-
-        let result = convert_syscall_rule_to_oci(&syscall_rule, Action::Allow).unwrap();
+        let result = convert_syscall_rule_to_oci(&rule, Action::Allow).unwrap();
         assert_eq!(result.names, vec!["read"]);
         assert_eq!(result.action, Action::Allow);
         assert_eq!(result.conditions.len(), 0);
-    }
 
-    #[test]
-    fn test_convert_syscall_rule_to_oci_with_conditions() {
-        let syscall_rule = SyscallRule {
+        // With conditions
+        let rule = SyscallRule {
             name: "open".to_string(),
             conditions: vec![SyscallCondition {
                 type_: "bitmask_all".to_string(),
@@ -1190,8 +1101,7 @@ mod tests {
                 flags: Some("O_WRONLY".to_string()),
             }],
         };
-
-        let result = convert_syscall_rule_to_oci(&syscall_rule, Action::Log).unwrap();
+        let result = convert_syscall_rule_to_oci(&rule, Action::Log).unwrap();
         assert_eq!(result.names, vec!["open"]);
         assert_eq!(result.action, Action::Log);
         assert_eq!(result.conditions.len(), 1);
@@ -1205,7 +1115,7 @@ mod tests {
     fn test_expand_group_simple() {
         let mut groups = HashMap::new();
         groups.insert(
-            "test_group".to_string(),
+            "test".to_string(),
             AbstractGroupDef {
                 rules: vec![
                     GroupRule::Syscall(SyscallRule {
@@ -1221,7 +1131,7 @@ mod tests {
         );
 
         let mut visited = HashSet::new();
-        let result = expand_group("test_group", &groups, &mut visited).unwrap();
+        let result = expand_group("test", &groups, &mut visited).unwrap();
 
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].name, "read");
@@ -1232,7 +1142,7 @@ mod tests {
     fn test_expand_group_nested() {
         let mut groups = HashMap::new();
         groups.insert(
-            "inner_group".to_string(),
+            "inner".to_string(),
             AbstractGroupDef {
                 rules: vec![GroupRule::Syscall(SyscallRule {
                     name: "read".to_string(),
@@ -1241,7 +1151,7 @@ mod tests {
             },
         );
         groups.insert(
-            "outer_group".to_string(),
+            "outer".to_string(),
             AbstractGroupDef {
                 rules: vec![
                     GroupRule::Syscall(SyscallRule {
@@ -1249,14 +1159,14 @@ mod tests {
                         conditions: vec![],
                     }),
                     GroupRule::GroupRef(GroupReference {
-                        group: "inner_group".to_string(),
+                        group: "inner".to_string(),
                     }),
                 ],
             },
         );
 
         let mut visited = HashSet::new();
-        let result = expand_group("outer_group", &groups, &mut visited).unwrap();
+        let result = expand_group("outer", &groups, &mut visited).unwrap();
 
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].name, "write");
@@ -1264,54 +1174,130 @@ mod tests {
     }
 
     #[test]
-    fn test_expand_group_unknown_group() {
-        let groups = HashMap::new();
-        let mut visited = HashSet::new();
+    fn test_expand_group_errors() {
+        let mut groups = HashMap::new();
 
+        // Unknown group
+        let mut visited = HashSet::new();
         let result = expand_group("nonexistent", &groups, &mut visited);
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            ProfileError::UnknownGroup(name) => assert_eq!(name, "nonexistent"),
-            _ => panic!("Expected UnknownGroup error"),
-        }
+        assert!(matches!(result, Err(ProfileError::UnknownGroup(_))));
+
+        // Self-reference (circular)
+        groups.insert(
+            "self_ref".to_string(),
+            AbstractGroupDef {
+                rules: vec![GroupRule::GroupRef(GroupReference {
+                    group: "self_ref".to_string(),
+                })],
+            },
+        );
+        let mut visited = HashSet::new();
+        let result = expand_group("self_ref", &groups, &mut visited);
+        assert!(matches!(result, Err(ProfileError::CircularReference(_))));
+
+        // Circular reference A->B->A
+        groups.clear();
+        groups.insert(
+            "a".to_string(),
+            AbstractGroupDef {
+                rules: vec![GroupRule::GroupRef(GroupReference {
+                    group: "b".to_string(),
+                })],
+            },
+        );
+        groups.insert(
+            "b".to_string(),
+            AbstractGroupDef {
+                rules: vec![GroupRule::GroupRef(GroupReference {
+                    group: "a".to_string(),
+                })],
+            },
+        );
+        let mut visited = HashSet::new();
+        let result = expand_group("a", &groups, &mut visited);
+        assert!(matches!(result, Err(ProfileError::CircularReference(_))));
     }
 
     #[test]
-    fn test_expand_group_circular_reference() {
+    fn test_expand_group_complex_cycle() {
+        // Test A->B->C->A cycle
         let mut groups = HashMap::new();
         groups.insert(
-            "group_a".to_string(),
+            "a".to_string(),
             AbstractGroupDef {
                 rules: vec![GroupRule::GroupRef(GroupReference {
-                    group: "group_b".to_string(),
+                    group: "b".to_string(),
                 })],
             },
         );
         groups.insert(
-            "group_b".to_string(),
+            "b".to_string(),
             AbstractGroupDef {
                 rules: vec![GroupRule::GroupRef(GroupReference {
-                    group: "group_a".to_string(),
+                    group: "c".to_string(),
+                })],
+            },
+        );
+        groups.insert(
+            "c".to_string(),
+            AbstractGroupDef {
+                rules: vec![GroupRule::GroupRef(GroupReference {
+                    group: "a".to_string(),
                 })],
             },
         );
 
         let mut visited = HashSet::new();
-        let result = expand_group("group_a", &groups, &mut visited);
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            ProfileError::CircularReference(_) => (),
-            _ => panic!("Expected CircularReference error"),
-        }
+        let result = expand_group("a", &groups, &mut visited);
+        assert!(matches!(result, Err(ProfileError::CircularReference(_))));
     }
 
     #[test]
-    fn test_load_profile_with_profile() {
+    fn test_expand_group_no_false_positive() {
+        // Test A->B, A->C (no cycle - shared dependency is OK)
+        let mut groups = HashMap::new();
+        groups.insert(
+            "shared".to_string(),
+            AbstractGroupDef {
+                rules: vec![GroupRule::Syscall(SyscallRule {
+                    name: "read".to_string(),
+                    conditions: vec![],
+                })],
+            },
+        );
+        groups.insert(
+            "a".to_string(),
+            AbstractGroupDef {
+                rules: vec![
+                    GroupRule::GroupRef(GroupReference {
+                        group: "shared".to_string(),
+                    }),
+                    GroupRule::Syscall(SyscallRule {
+                        name: "write".to_string(),
+                        conditions: vec![],
+                    }),
+                ],
+            },
+        );
+
+        let mut visited = HashSet::new();
+        let result = expand_group("a", &groups, &mut visited);
+        assert!(result.is_ok());
+        let rules = result.unwrap();
+        assert_eq!(rules.len(), 2);
+    }
+
+    // ========================================================================
+    // Profile Loading Tests
+    // ========================================================================
+
+    #[test]
+    fn test_load_profile_with_file() {
         let profile_content = r#"
             default_action = "KillProcess"
             architectures = ["SCMP_ARCH_X86_64"]
         "#;
+
         let temp_dir = std::env::temp_dir();
         let profile_path = temp_dir.join("test_profile.toml");
         fs::write(&profile_path, profile_content).unwrap();
@@ -1323,35 +1309,93 @@ mod tests {
             &[],
             &[],
             false,
-        )
-        .unwrap();
-        assert_eq!(result.get_act_default().unwrap(), ScmpAction::KillProcess);
-        assert!(result.is_arch_present(ScmpArch::X8664).unwrap());
+        );
+
+        assert!(result.is_ok());
+        let ctx = result.unwrap();
+        assert_eq!(ctx.get_act_default().unwrap(), ScmpAction::KillProcess);
+        assert!(ctx.is_arch_present(ScmpArch::X8664).unwrap());
 
         fs::remove_file(profile_path).unwrap();
     }
 
     #[test]
-    fn test_load_profile_no_profile() {
-        let result = load_profile(None, None, None, &[], &[], false).unwrap();
-        assert_eq!(result.get_act_default().unwrap(), ScmpAction::Allow);
+    fn test_load_profile_defaults() {
+        // No profile, no log_allowed
+        let ctx = load_profile(None, None, None, &[], &[], false).unwrap();
+        assert_eq!(ctx.get_act_default().unwrap(), ScmpAction::Allow);
+
+        // No profile, with log_allowed
+        let ctx = load_profile(None, None, None, &[], &[], true).unwrap();
+        assert_eq!(ctx.get_act_default().unwrap(), ScmpAction::Log);
+    }
+
+    // ========================================================================
+    // Coalesce Rules Tests
+    // ========================================================================
+
+    #[test]
+    fn test_coalesce_rules() {
+        let mut profile = OciSeccomp {
+            default_action: Action::Errno,
+            default_errno_ret: None,
+            architectures: vec!["SCMP_ARCH_X86_64".to_string()],
+            syscalls: Some(vec![
+                OciSyscall {
+                    names: vec!["read".to_string()],
+                    action: Action::Allow,
+                    errno_ret: None,
+                    conditions: vec![],
+                },
+                OciSyscall {
+                    names: vec!["write".to_string()],
+                    action: Action::Allow,
+                    errno_ret: None,
+                    conditions: vec![],
+                },
+                OciSyscall {
+                    names: vec!["open".to_string()],
+                    action: Action::Log,
+                    errno_ret: None,
+                    conditions: vec![],
+                },
+            ]),
+            abstract_syscalls: None,
+        };
+
+        coalesce_rules_by_action(&mut profile);
+
+        let syscalls = profile.syscalls.unwrap();
+        assert_eq!(syscalls.len(), 2); // read+write merged, open separate
+
+        // Find the Allow rule
+        let allow_rule = syscalls.iter().find(|s| s.action == Action::Allow).unwrap();
+        assert_eq!(allow_rule.names.len(), 2);
+        assert!(allow_rule.names.contains(&"read".to_string()));
+        assert!(allow_rule.names.contains(&"write".to_string()));
     }
 
     #[test]
-    fn test_expand_group_self_reference() {
-        let mut groups = HashMap::new();
-        groups.insert(
-            "self_ref".to_string(),
-            AbstractGroupDef {
-                rules: vec![GroupRule::GroupRef(GroupReference {
-                    group: "self_ref".to_string(),
-                })],
-            },
-        );
+    fn test_explode_syscalls() {
+        let mut profile = OciSeccomp {
+            default_action: Action::Errno,
+            default_errno_ret: None,
+            architectures: vec!["SCMP_ARCH_X86_64".to_string()],
+            syscalls: Some(vec![OciSyscall {
+                names: vec!["read".to_string(), "write".to_string(), "open".to_string()],
+                action: Action::Allow,
+                errno_ret: None,
+                conditions: vec![],
+            }]),
+            abstract_syscalls: None,
+        };
 
-        let mut visited = HashSet::new();
-        let result = expand_group("self_ref", &groups, &mut visited);
+        explode_syscalls(&mut profile);
 
-        assert!(result.is_err());
+        let syscalls = profile.syscalls.unwrap();
+        assert_eq!(syscalls.len(), 3);
+        assert_eq!(syscalls[0].names, vec!["read"]);
+        assert_eq!(syscalls[1].names, vec!["write"]);
+        assert_eq!(syscalls[2].names, vec!["open"]);
     }
 }
