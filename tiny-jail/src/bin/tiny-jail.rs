@@ -6,7 +6,8 @@ use thiserror::Error;
 
 use tiny_jail::actions::Action;
 use tiny_jail::audisp::AudispGuard;
-use tiny_jail::commands::{self, CommandError};
+use tiny_jail::commands;
+use tiny_jail::error::JailError;
 use tiny_jail::filters::{self, ProfileError};
 
 #[derive(Error, Debug)]
@@ -14,7 +15,7 @@ pub enum AppError {
     #[error("Profile loading failed: {0}")]
     Profile(#[from] ProfileError),
     #[error("Command execution failed: {0}")]
-    Command(#[from] CommandError),
+    Command(#[from] JailError),
     #[error("{0}")]
     Message(String),
     #[error("Audisp control failed: {0}")]
