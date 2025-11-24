@@ -3,7 +3,7 @@ use std::io::{self, Write};
 
 use log2::*;
 
-use crate::commands::filtered_exec;
+use crate::exec::filtered_exec;
 use crate::error::JailError;
 use crate::filters::{
     apply_profile, coalesce_rules_by_action, explode_syscalls, read_and_expand_profile, OciSeccomp,

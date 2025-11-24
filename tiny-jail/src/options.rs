@@ -24,3 +24,14 @@ pub struct ReduceProfileOptions {
     pub initial_chunks: usize,
     pub with_err: bool,
 }
+
+/// Options for fuzzing.
+#[derive(Debug)]
+pub struct FuzzOptions {
+    pub exec: Vec<String>,
+    pub env: bool,
+    pub output: Option<String>,
+    pub iterations: u32,
+    pub threads: u32,
+    pub batch: bool,
+}

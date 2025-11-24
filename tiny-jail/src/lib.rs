@@ -1,6 +1,7 @@
 pub mod actions;
 pub mod audisp;
-pub mod commands;
+pub mod exec;
+pub mod fuzz;
 pub mod error;
 pub mod filters;
 pub mod io;

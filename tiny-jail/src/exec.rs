@@ -20,8 +20,7 @@ use std::time::Duration;
 use crate::error::JailError;
 use crate::io::{capture_and_display_stream, CapturedOutput};
 use crate::monitor::SeccompMonitor;
-use crate::options::{FilteredExecOptions, ReduceProfileOptions};
-use crate::reduce;
+use crate::options::FilteredExecOptions;
 
 // ============================================================================
 // FILTERED EXECUTION
@@ -443,30 +442,5 @@ fn get_signal_name(signal: i32) -> String {
     }
 }
 
-// ============================================================================
-// REDUCE PROFILE
-// ============================================================================
 
-pub fn reduce_profile(options: ReduceProfileOptions) -> Result<(), JailError> {
-    reduce::reduce_profile(options)
-}
 
-// ============================================================================
-// FUZZ PROFILE
-// ============================================================================
-
-/// Execute a command in fuzzing mode (not yet implemented).
-pub fn fuzz_exec(_path: Vec<String>, _pass_env: bool) -> Result<(), JailError> {
-    Err(JailError::FuzzingNotImplemented)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_fuzz_exec() {
-        let result = fuzz_exec(vec!["true".to_string()], false);
-        assert!(matches!(result, Err(JailError::FuzzingNotImplemented)));
-    }
-}

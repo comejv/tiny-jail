@@ -6,9 +6,11 @@ use thiserror::Error;
 
 use tiny_jail::actions::Action;
 use tiny_jail::audisp::AudispGuard;
-use tiny_jail::commands;
 use tiny_jail::error::JailError;
+use tiny_jail::exec;
 use tiny_jail::filters::{self, ProfileError};
+use tiny_jail::fuzz;
+use tiny_jail::reduce;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -251,13 +253,21 @@ fn run() -> Result<(), AppError> {
                 batch_mode: cli.batch,
                 capture_output: false,
             };
-            commands::filtered_exec(filter, &options)?;
+            exec::filtered_exec(filter, &options)?;
             info!("Execution finished.");
         }
         Commands::Fuzz(fuzz_args) => {
             info!("Fuzzing the given command...");
             debug!("Command: {:?}", fuzz_args.exec);
-            commands::fuzz_exec(fuzz_args.exec, cli.env)?;
+            let options = tiny_jail::options::FuzzOptions {
+                exec: fuzz_args.exec,
+                env: cli.env,
+                output: fuzz_args.output,
+                iterations: fuzz_args.iterations,
+                threads: fuzz_args.threads,
+                batch: cli.batch,
+            };
+            fuzz::fuzz_exec(options)?;
             info!("Fuzzing finished.");
         }
         Commands::Reduce(reduce_args) => {
@@ -283,7 +293,7 @@ fn run() -> Result<(), AppError> {
                 initial_chunks: reduce_args.initial_chunks,
                 with_err: reduce_args.with_err,
             };
-            commands::reduce_profile(options)?;
+            reduce::reduce_profile(options)?;
             info!("Profile reduction finished.");
         }
     }
