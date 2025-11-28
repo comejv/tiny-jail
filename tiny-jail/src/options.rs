@@ -1,5 +1,6 @@
-
 use std::path::PathBuf;
+
+use crate::io::SimilarityConfig;
 
 /// Options for filtered command execution.
 #[derive(Debug)]
@@ -23,6 +24,9 @@ pub struct ReduceProfileOptions {
     pub batch: bool,
     pub initial_chunks: usize,
     pub with_err: bool,
+    pub greedy_pass: bool,
+    pub stats_file: Option<String>,
+    pub similarity_config: SimilarityConfig,
 }
 
 /// Options for fuzzing.
