@@ -199,9 +199,9 @@ impl SeccompEvent {
 #[derive(Default)]
 pub struct SeccompStats {
     pub total_events: usize,
-    pub by_process: HashMap<String, usize>,
-    pub by_syscall: HashMap<u32, usize>,
-    pub by_exe: HashMap<String, usize>,
+    pub by_process: HashMap<String, u32>,
+    pub by_syscall: HashMap<u32, u32>,
+    pub by_exe: HashMap<String, u32>,
 }
 
 impl SeccompStats {
