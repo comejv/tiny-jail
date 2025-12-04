@@ -1,7 +1,7 @@
+use crate::filters::ProfileError;
+use libseccomp::error::SeccompError;
 use std::io;
 use thiserror::Error;
-use libseccomp::error::SeccompError;
-use crate::filters::ProfileError;
 
 #[derive(Error, Debug)]
 pub enum JailError {

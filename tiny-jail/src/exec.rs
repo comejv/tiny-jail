@@ -441,6 +441,3 @@ fn get_signal_name(signal: i32) -> String {
         Err(_) => format!("UNKNOWN({})", signal),
     }
 }
-
-
-
