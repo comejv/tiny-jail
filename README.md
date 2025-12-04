@@ -11,7 +11,7 @@ The tool is conceptually inspired by the `seccomp` capabilities of projects like
 * [x] Let user specify additional actions on command-line.
 * [x] Handle log action and show logs in the output.
 * [x] Handle abstract syscall groups in the policy.
-* [ ] Minimizing an existing policy.
+* [x] Minimizing an existing policy.
 * [ ] Fuzzer-Based Dynamic Generation.
 
 See [notes/goals.md](notes/goals.md) for more details.

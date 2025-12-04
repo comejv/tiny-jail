@@ -37,6 +37,7 @@ The project will be aimed at **X86_64 Linux systems** and tested on CachyOS.
 - [ ] Providing a TUI to configure the sandboxing rules and generating the configuration file (outputting OCI-compliant JSON).
 - [x] Logging of the system calls, possibly by using the `SCMP_ACT_LOG` action.
 - [x] Implementing **Syscall Argument Filtering** to achieve true Least Privilege compliance by generating complex BPF rules that check register values (arguments).
+- [x] Exposing a **Reduce** mode to minimize a policy through delta-debugging and weighted delta-debugging.
 - [ ] Exposing an API to allow for another instance of tiny-jail to monitor the first instance and dynamically update the BPF filter (through `SCMP_ACT_NOTIFY`, asking notify daemon what should be done about a new syscall).
 - [ ] Show “which syscalls seen / which missed”, timeline view, --explain SYS_open to show call sites if available.
 
