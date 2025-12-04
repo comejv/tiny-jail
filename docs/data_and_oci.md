@@ -8,8 +8,7 @@ The three files serve different purposes:
 
 1. **`syscalls.json`** - Raw syscall definitions from the kernel
 2. **`abstract_syscalls.json`** - Functional groupings of related syscalls
-3. **`seccomp_rules.json`** - Merged data ready for seccomp rule generation
-4. **`oci_1-1.md`** - OCI Linux Container Configuration (seccomp rules)
+3. **`oci_1-1.md`** - OCI Linux Container Configuration (seccomp rules)
 
 ---
 
@@ -122,51 +121,43 @@ The three files serve different purposes:
 
 ---
 
-## 4. Extended OCI Linux Container Configuration for Seccomp
+## 3. Extended OCI Linux Container Configuration for Seccomp
 
-**Purpose:** OCI Linux Container Configuration (OCI 1.1) for seccomp rules with support for abstract syscalls.
+**Purpose:** OCI Linux Container Configuration (OCI 1.1) for seccomp rules with support for abstract syscalls, using TOML format.
 
 **Structure:**
-```json
-{
-  "defaultAction": "SCMP_ACT_***",
-  "defaultErrnoRet": ***,
-  "architectures": [
-    "SCMP_ARCH_X86_64"
-  ],
-  "syscalls": [
-    {
-      "names": [
-        "***",
-        "***"
-      ],
-      "action": "SCMP_ACT_***"
-    },
-    {
-      "names": [
-        "***",
-        "***"
-      ],
-      "action": "SCMP_ACT_***"
-    }
-  ],
-  "abstractSyscalls": [
-    {
-      "names": [
-        "WriteOpen"
-      ],
-      "action": "SCMP_ACT_KILL"
-    }
-  ]
-}
+```toml
+default_action = "Errno"
+default_errno_ret = 1  # EPERM
+architectures = ["SCMP_ARCH_X86_64"]
+
+[[syscalls]]
+names = ["read", "write"]
+action = "Allow"
+
+[[syscalls]]
+names = ["openat"]
+action = "Allow"
+# Optional: errno return value for this specific rule (if action is Errno)
+# errno_ret = 13 # EACCES
+
+[[abstract_syscalls]]
+names = ["WriteOpen"]
+action = "KillThread"
 ```
 
 **Fields:**
-* `defaultAction` - Default action for syscalls not specified in the profile
-* `defaultErrnoRet` - Default errno return value for SCMP_ACT_ERRNO actions
-* `architectures` - List of architectures supported by the profile
-* `syscalls` - List of syscalls to apply the profile to
-* `abstractSyscalls` - List of abstract syscalls to apply the profile to (our addition to the OCI spec)
+* `default_action` - Default action for syscalls not specified in the profile (e.g., `Allow`, `Log`, `KillThread`, `Errno`, `Trap`)
+* `default_errno_ret` - Default errno return value for `Errno` actions (optional)
+* `architectures` - List of architectures supported by the profile (default: `["SCMP_ARCH_X86_64"]`)
+* `syscalls` - List of concrete syscall rules. Each rule contains:
+    * `names`: List of syscall names
+    * `action`: The action to take
+    * `errno_ret`: Optional errno override
+    * `conditions`: Optional list of argument inspection conditions
+* `abstract_syscalls` - List of abstract syscall group rules (our extension to the OCI spec). Each rule contains:
+    * `names`: List of abstract group names (defined in `abstract_rules.json`)
+    * `action`: The action to take
 
 **Use Case:**
 * Applying a security policy to a container
