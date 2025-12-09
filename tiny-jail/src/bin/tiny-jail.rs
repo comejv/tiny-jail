@@ -47,7 +47,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Fuzz the given executable to generate a new profile.
+    /// Fuzz the given executable to generate a new profile (not implemented yet).
     ///
     /// This command will run the executable with various inputs to
     /// create a comprehensive profile of its behavior.

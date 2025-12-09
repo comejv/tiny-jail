@@ -14,8 +14,6 @@ The tool is conceptually inspired by the `seccomp` capabilities of projects like
 * [x] Minimizing an existing policy.
 * [ ] Fuzzer-Based Dynamic Generation.
 
-See [notes/goals.md](notes/goals.md) for more details.
-
 ## Implementation and Policy Structure
 
 The implementation will leverage Rust's memory safety and concurrency features to safely and efficiently interact with the operating system. Key components include:
@@ -59,11 +57,11 @@ cargo run --bin tiny-jail -- -p /path/to/your/profile.json /bin/ls -la
 ---
 **External References:**
 
+*   **`syscalls classification` article:** <https://www.seclab.cs.sunysb.edu/sekar/papers/syscallclassif.htm>
 *   **`seccomp` man page:** `man 2 seccomp` (or online: <https://man7.org/linux/man-pages/man2/seccomp.2.html>)
 *   **`libseccomp` rust crate:** <https://docs.rs/libseccomp/latest/libseccomp/>
 *   **`SeccompFuzzer` paper and gitlab repo:** <https://gitlab.com/iot-aalen/fuzz-seccomp-filter>
 *   **`nix` Rust crate:** <https://docs.rs/nix/latest/nix/>
+*   **OCI Runtime Specification Seccomp Schema:** Policies will conform to OCI standards.
 *   **`Firejail` project:** <https://firejail.wordpress.com/> (for conceptual inspiration)
 *   **`Bubblewrap` project:** <https://github.com/containers/bubblewrap> (for conceptual inspiration)
-*   **OCI Runtime Specification Seccomp Schema:** Policies will conform to OCI standards.
-*   **Syscall Policy Generation Research:** Inspired by Chestnuts (Static Analysis) and Fuzzer-Based Dynamic Generation methods.
