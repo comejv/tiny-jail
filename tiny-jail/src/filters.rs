@@ -99,24 +99,30 @@ const ABSTRACT_RULES_DATA: &str = include_str!("../data/abstract_rules.min.json"
 // Profile Structures
 // ============================================================================
 
+/// A single condition for a syscall rule. Fields are public for fuzzing purposes.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct OciSyscallCondition {
-    index: u8,
-    value: u64,
-    value_two: Option<u64>,
-    op: String,
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+pub struct OciSyscallCondition {
+    pub index: u8,
+    pub value: u64,
+    pub value_two: Option<u64>,
+    pub op: String,
 }
 
+/// A single syscall rule. Fields are public for fuzzing purposes.
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct OciSyscall {
     pub names: Vec<String>,
-    action: Action,
-    errno_ret: Option<u32>,
+    pub action: Action,
+    pub errno_ret: Option<u32>,
     #[serde(default)]
-    conditions: Vec<OciSyscallCondition>,
+    pub conditions: Vec<OciSyscallCondition>,
 }
 
+/// A single abstract syscall rule. Fields are public for fuzzing purposes.
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct AbstractSyscall {
     names: Vec<String>,
     action: Action,
@@ -127,6 +133,7 @@ fn default_architectures() -> Vec<String> {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct OciSeccomp {
     pub default_action: Action,
     pub default_errno_ret: Option<u32>,
@@ -159,7 +166,12 @@ pub fn read_and_expand_profile(profile_path: &str) -> Result<OciSeccomp, Profile
         }
     })?;
 
-    let mut oci_seccomp: OciSeccomp = toml::from_str(&profile_content).map_err(|e| {
+    parse_and_expand_profile(&profile_content)
+}
+
+/// Parse a seccomp profile string and expand abstract syscalls to concrete ones.
+pub fn parse_and_expand_profile(profile_content: &str) -> Result<OciSeccomp, ProfileError> {
+    let mut oci_seccomp: OciSeccomp = toml::from_str(profile_content).map_err(|e| {
         error!("Failed to parse profile: {}", e);
         ProfileError::ProfileParse(e)
     })?;
@@ -476,6 +488,18 @@ fn apply_syscall_rule(
     );
 
     for syscall_name in &syscall_entry.names {
+        if let Some(arity) = get_syscall_arity(syscall_name) {
+            for cond in &syscall_entry.conditions {
+                if cond.index >= arity {
+                    warn!(
+                        "Skipping invalid condition index {} for syscall {} (arity {})",
+                        cond.index, syscall_name, arity
+                    );
+                    return Ok(());
+                }
+            }
+        }
+
         let syscall = ScmpSyscall::from_name(syscall_name).map_err(|_| {
             error!("Unknown syscall: {}", syscall_name);
             ProfileError::UnknownSyscall(syscall_name.to_string())
@@ -495,6 +519,24 @@ fn apply_syscall_rule(
     }
 
     Ok(())
+}
+
+fn get_syscall_arity(name: &str) -> Option<u8> {
+    match name {
+        "read" | "write" | "socket" | "connect" | "bind" | "execve" | "mprotect" | "readlink"
+        | "getdents" | "getdents64" | "fcntl" | "listxattr" | "llistxattr" | "flistxattr" => {
+            Some(3)
+        }
+        "open" => Some(3),
+        "openat" | "faccessat" | "readlinkat" | "getxattr" | "lgetxattr" | "fgetxattr" => Some(4),
+        "close" | "fsync" | "fdatasync" | "syncfs" => Some(1),
+        "clone" | "setxattr" | "lsetxattr" | "fsetxattr" => Some(5),
+        "mmap" => Some(6),
+        "munmap" | "fstat" | "stat" | "lstat" | "access" | "arch_prctl" | "flock"
+        | "removexattr" | "lremovexattr" | "fremovexattr" | "getcwd" => Some(2),
+        "sync" => Some(0),
+        _ => None,
+    }
 }
 
 // ============================================================================

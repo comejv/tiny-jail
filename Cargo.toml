@@ -3,5 +3,6 @@ members = [
     "tiny-jail",
     "audisp-plugin",
     "macros",
+    "tiny-jail/fuzz",
 ]
 resolver = "3"

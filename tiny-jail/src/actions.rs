@@ -15,6 +15,7 @@ pub enum ActionError {
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum Action {
     #[default]
     #[clap(name = "kill")]
